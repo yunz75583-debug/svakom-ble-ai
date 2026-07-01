@@ -11,7 +11,7 @@ app.use(express.json());
 const toyQueue = {
   command: null,
   timestamp: 0,
-  secret: process.env.BRIDGE_SECRET || '123456' // 默认密码，建议在 Railway 环境变量里设置
+  secret: process.env.BRIDGE_SECRET || '123456'
 };
 
 // ===== 健康检查 =====
@@ -59,6 +59,21 @@ app.get('/status', (req, res) => {
     timestamp: toyQueue.timestamp,
     age: Date.now() - toyQueue.timestamp
   });
+});
+
+// ===== 糯叽叽 MCP 入口 - POST / =====
+app.post('/', (req, res) => {
+  const { secret, action, value } = req.body;
+
+  if (secret !== toyQueue.secret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  toyQueue.command = { action, value, received: Date.now() };
+  toyQueue.timestamp = Date.now();
+
+  console.log(`📥 糯叽叽指令: ${action} = ${value}`);
+  res.json({ status: 'ok', command: toyQueue.command });
 });
 
 app.listen(PORT, () => {
