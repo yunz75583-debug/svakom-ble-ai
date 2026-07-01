@@ -65,6 +65,8 @@ app.get('/status', (req, res) => {
 app.post('/', (req, res) => {
   const { method, params, secret, action, value } = req.body;
 
+  console.log('📥 糯叽叽请求:', JSON.stringify(req.body));
+
   // 处理 tools/list 请求
   if (method === 'tools/list') {
     return res.json({
@@ -72,7 +74,7 @@ app.post('/', (req, res) => {
         {
           name: 'toy_set_speed',
           description: '设置玩具强度 (0-100)',
-          parameters: {
+          inputSchema: {
             type: 'object',
             properties: {
               value: { type: 'number', minimum: 0, maximum: 100 }
@@ -83,7 +85,10 @@ app.post('/', (req, res) => {
         {
           name: 'toy_stop',
           description: '停止玩具',
-          parameters: { type: 'object', properties: {} }
+          inputSchema: {
+            type: 'object',
+            properties: {}
+          }
         }
       ]
     });
@@ -125,9 +130,4 @@ app.post('/', (req, res) => {
   }
 
   res.json({ error: '未知请求' });
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🔐 Secret: ${toyQueue.secret}`);
 });
