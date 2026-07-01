@@ -204,16 +204,13 @@
     <script>
         // ============================================================
         // SVAKOM SL278H 网页中继
-        // 连接蓝牙 + 轮询云端指令
         // ============================================================
 
-        // ---------- 配置 ----------
         const SERVICE_UUID = "FFE0";
         const CHARACTERISTIC_UUID = "FFE1";
         const KEEPALIVE_INTERVAL_MS = 1500;
         const POLL_INTERVAL_MS = 300;
 
-        // ---------- 状态 ----------
         let bleDevice = null, bleServer = null, bleChar = null;
         let isBleConnected = false;
         let isRelayConnected = false;
@@ -224,7 +221,6 @@
         let relaySecret = '';
         let isRunning = false;
 
-        // DOM
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
         const deviceName = document.getElementById('deviceName');
@@ -239,7 +235,6 @@
         const stopBtn = document.getElementById('stopBtn');
         const testBtn = document.getElementById('testBtn');
 
-        // ---------- 工具 ----------
         function logMessage(msg, type = '') {
             const time = new Date().toLocaleTimeString();
             const cls = type ? ` class="${type}"` : '';
@@ -260,86 +255,96 @@
             return new Uint8Array([0x55, 0x04, 0x00, 0x00, 0x01, value, 0xAA]);
         }
 
-        // ---------- 发送蓝牙指令 ----------
-        async function sendBleCommand(intensity) {
+        // ===== 发送花样指令 =====
+        async function sendPatternCommand(pattern, level) {
             if (!bleChar || !isBleConnected) {
+                logMessage('❌ 蓝牙未连接', 'error');
                 return false;
             }
+            const mode = Math.min(8, Math.max(1, pattern));
+            const lv = Math.min(5, Math.max(1, level || 3));
+            const bytes = new Uint8Array([0x55, 0x03, 0x00, 0x00, mode, lv, 0x00]);
             try {
-                const bytes = buildCommand(intensity);
                 await bleChar.writeValue(bytes);
                 const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
-                logMessage(`📤 发送: ${hex} (${intensity}%)`, 'highlight');
+                logMessage(`📤 花样: ${hex} (花样 ${mode}, 等级 ${lv})`, 'highlight');
                 return true;
             } catch (e) {
-                logMessage(`❌ 蓝牙发送失败: ${e.message}`, 'error');
+                logMessage(`❌ 花样发送失败: ${e.message}`, 'error');
                 return false;
             }
         }
 
-        // ---------- 续命 ----------
+        async function sendBleCommand(intensity) {
+            if (!bleChar || !isBleConnected) return false;
+            try {
+                const bytes = buildCommand(intensity);
+                await bleChar.writeValue(bytes);
+                const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+                logMessage(`📤 强度: ${hex} (${intensity}%)`, 'highlight');
+                return true;
+            } catch (e) {
+                logMessage(`❌ 发送失败: ${e.message}`, 'error');
+                return false;
+            }
+        }
+
         function startKeepalive(intensity) {
             stopKeepalive();
             if (intensity === 0 || !isBleConnected) return;
             isRunning = true;
             sendBleCommand(intensity);
             keepaliveTimer = setInterval(() => {
-                if (isBleConnected && isRunning) {
-                    sendBleCommand(intensity);
-                } else {
-                    stopKeepalive();
-                }
+                if (isBleConnected && isRunning) sendBleCommand(intensity);
+                else stopKeepalive();
             }, KEEPALIVE_INTERVAL_MS);
         }
 
         function stopKeepalive() {
             isRunning = false;
-            if (keepaliveTimer) {
-                clearInterval(keepaliveTimer);
-                keepaliveTimer = null;
-            }
+            if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
         }
 
-        // ---------- 设置强度 ----------
         function setIntensity(value) {
             value = Math.max(0, Math.min(100, value));
             currentIntensity = value;
             intensitySlider.value = value;
             intensityDisplay.textContent = value + '%';
-            if (value === 0) {
-                stopKeepalive();
-                sendBleCommand(0);
-            } else if (isBleConnected) {
-                startKeepalive(value);
-            }
+            if (value === 0) { stopKeepalive(); sendBleCommand(0); }
+            else if (isBleConnected) startKeepalive(value);
         }
 
-        // ---------- 轮询云端 ----------
+        // ===== 轮询云端 =====
         async function pollCloud() {
             if (!isRelayConnected || !relayUrl || !relaySecret) return;
             try {
-                const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
-                const resp = await fetch(url);
+                const resp = await fetch(`${relayUrl}/toy-next?secret=${relaySecret}`);
                 if (!resp.ok) {
-                    if (resp.status === 401) {
-                        logMessage('❌ 中继密码错误', 'error');
-                        isRelayConnected = false;
-                        return;
-                    }
+                    if (resp.status === 401) { logMessage('❌ 中继密码错误', 'error'); isRelayConnected = false; }
                     return;
                 }
                 const data = await resp.json();
-                if (data.command && data.command.action === 'intensity') {
-                    const val = data.command.value;
+                if (!data.command) return;
+
+                const cmd = data.command;
+                if (cmd.action === 'intensity') {
+                    const val = cmd.value;
                     logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
                     setIntensity(val);
                     document.querySelectorAll('[data-intensity]').forEach(b => {
                         b.classList.toggle('active', parseInt(b.dataset.intensity) === val);
                     });
+                } else if (cmd.action === 'pattern') {
+                    const pattern = cmd.pattern;
+                    const level = cmd.level || 3;
+                    logMessage(`📥 云端指令: 花样 ${pattern}，等级 ${level}`, 'info');
+                    sendPatternCommand(pattern, level);
+                } else if (cmd.action === 'stop') {
+                    logMessage('📥 云端指令: 停止', 'info');
+                    setIntensity(0);
+                    document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
                 }
-            } catch (e) {
-                // 静默失败
-            }
+            } catch (e) {}
         }
 
         function startPolling() {
@@ -349,28 +354,17 @@
         }
 
         function stopPolling() {
-            if (pollTimer) {
-                clearInterval(pollTimer);
-                pollTimer = null;
-                logMessage('⏹ 停止轮询', '');
-            }
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; logMessage('⏹ 停止轮询', ''); }
         }
 
-        // ---------- 连接中继 ----------
+        // ===== 连接中继 =====
         async function connectRelay() {
             const url = relayUrlInput.value.trim();
             const secret = relaySecretInput.value.trim();
-            if (!url) {
-                logMessage('❌ 请输入中继地址', 'error');
-                return;
-            }
-            if (!secret) {
-                logMessage('❌ 请输入中继密码', 'error');
-                return;
-            }
+            if (!url) { logMessage('❌ 请输入中继地址', 'error'); return; }
+            if (!secret) { logMessage('❌ 请输入中继密码', 'error'); return; }
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
-
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
@@ -386,10 +380,10 @@
             }
         }
 
-        // ---------- 连接蓝牙 ----------
+        // ===== 连接蓝牙 =====
         async function connectBle() {
             if (!navigator.bluetooth) {
-                logMessage('❌ 浏览器不支持 Web Bluetooth，请使用 Bluefy', 'error');
+                logMessage('❌ 请使用 Bluefy 浏览器打开', 'error');
                 alert('请使用 Bluefy 浏览器打开');
                 return;
             }
@@ -397,35 +391,27 @@
                 setStatus('connecting', '扫描中...');
                 connectBleBtn.disabled = true;
                 logMessage('🔍 扫描蓝牙设备...', '');
-
                 bleDevice = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: [SERVICE_UUID]
                 });
-
                 logMessage(`✅ 找到: ${bleDevice.name || '未知'}`, 'success');
                 deviceName.textContent = bleDevice.name || '未知';
-
                 bleServer = await bleDevice.gatt.connect();
                 logMessage('✅ GATT 连接成功', 'success');
-
                 const service = await bleServer.getPrimaryService(SERVICE_UUID);
                 bleChar = await service.getCharacteristic(CHARACTERISTIC_UUID);
                 logMessage('✅ 蓝牙特征已获取', 'success');
-
                 isBleConnected = true;
                 setStatus('connected', '蓝牙已连接');
                 controlSection.classList.add('active');
                 connectBleBtn.textContent = '✅ 蓝牙已连接';
                 logMessage('🎉 蓝牙就绪！等待云端指令...', 'success');
-
                 bleDevice.addEventListener('gattserverdisconnected', () => {
                     logMessage('⚠️ 蓝牙断开', 'error');
                     disconnectBle();
                 });
-
                 await sendBleCommand(0);
-
             } catch (e) {
                 logMessage(`❌ 蓝牙连接失败: ${e.message}`, 'error');
                 setStatus('disconnected', '连接失败');
@@ -437,10 +423,7 @@
             stopKeepalive();
             isBleConnected = false;
             bleChar = null;
-            if (bleServer) {
-                try { bleServer.disconnect(); } catch (e) {}
-                bleServer = null;
-            }
+            if (bleServer) { try { bleServer.disconnect(); } catch (e) {} bleServer = null; }
             bleDevice = null;
             setStatus('disconnected', '未连接');
             controlSection.classList.remove('active');
@@ -450,7 +433,7 @@
             logMessage('🔌 蓝牙已断开', '');
         }
 
-        // ---------- 事件绑定 ----------
+        // ===== 事件绑定 =====
         connectRelayBtn.addEventListener('click', connectRelay);
         connectBleBtn.addEventListener('click', connectBle);
 
@@ -478,19 +461,13 @@
         });
 
         testBtn.addEventListener('click', async () => {
-            if (!isBleConnected) {
-                logMessage('❌ 请先连接蓝牙', 'error');
-                return;
-            }
-            logMessage('🔬 测试: 发送 30% 指令...', '');
+            if (!isBleConnected) { logMessage('❌ 请先连接蓝牙', 'error'); return; }
+            logMessage('🔬 测试: 发送 30%...', '');
             await sendBleCommand(30);
-            setTimeout(async () => {
-                await sendBleCommand(0);
-                logMessage('⏹ 测试停止', '');
-            }, 500);
+            setTimeout(async () => { await sendBleCommand(0); logMessage('⏹ 测试停止', ''); }, 500);
         });
 
-        // ---------- 启动 ----------
+        // ===== 启动 =====
         setStatus('disconnected', '未连接');
         logMessage('📡 SVAKOM 网页中继已加载', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
@@ -500,12 +477,8 @@
         if (savedUrl) relayUrlInput.value = savedUrl;
         if (savedSecret) relaySecretInput.value = savedSecret;
 
-        relayUrlInput.addEventListener('change', () => {
-            localStorage.setItem('relayUrl', relayUrlInput.value);
-        });
-        relaySecretInput.addEventListener('change', () => {
-            localStorage.setItem('relaySecret', relaySecretInput.value);
-        });
+        relayUrlInput.addEventListener('change', () => localStorage.setItem('relayUrl', relayUrlInput.value));
+        relaySecretInput.addEventListener('change', () => localStorage.setItem('relaySecret', relaySecretInput.value));
 
         if (!navigator.bluetooth) {
             logMessage('⚠️ 请使用 Bluefy 浏览器打开', 'error');
