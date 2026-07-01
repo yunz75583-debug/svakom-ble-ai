@@ -61,13 +61,14 @@ app.get('/status', (req, res) => {
   });
 });
 
-// ===== 糯叽叽 MCP 入口 - POST / =====
+// ===== 糯叽叽 MCP 入口 - POST /（已关闭密码验证） =====
 app.post('/', (req, res) => {
   const { secret, action, value } = req.body;
 
-  if (secret !== toyQueue.secret) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  // 密码验证已关闭，方便测试
+  // if (secret !== toyQueue.secret) {
+  //   return res.status(401).json({ error: 'Unauthorized' });
+  // }
 
   toyQueue.command = { action, value, received: Date.now() };
   toyQueue.timestamp = Date.now();
