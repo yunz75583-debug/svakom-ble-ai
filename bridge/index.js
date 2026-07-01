@@ -61,20 +61,70 @@ app.get('/status', (req, res) => {
   });
 });
 
-// ===== 糯叽叽 MCP 入口 - POST /（已关闭密码验证） =====
+// ===== 糯叽叽 MCP 入口 - POST / =====
 app.post('/', (req, res) => {
-  const { secret, action, value } = req.body;
+  const { method, params, secret, action, value } = req.body;
 
-  // 密码验证已关闭，方便测试
-  // if (secret !== toyQueue.secret) {
-  //   return res.status(401).json({ error: 'Unauthorized' });
-  // }
+  // 处理 tools/list 请求
+  if (method === 'tools/list') {
+    return res.json({
+      tools: [
+        {
+          name: 'toy_set_speed',
+          description: '设置玩具强度 (0-100)',
+          parameters: {
+            type: 'object',
+            properties: {
+              value: { type: 'number', minimum: 0, maximum: 100 }
+            },
+            required: ['value']
+          }
+        },
+        {
+          name: 'toy_stop',
+          description: '停止玩具',
+          parameters: { type: 'object', properties: {} }
+        }
+      ]
+    });
+  }
 
-  toyQueue.command = { action, value, received: Date.now() };
-  toyQueue.timestamp = Date.now();
+  // 处理工具调用
+  if (method === 'tools/call') {
+    const toolName = params?.name;
+    const args = params?.arguments || {};
 
-  console.log(`📥 糯叽叽指令: ${action} = ${value}`);
-  res.json({ status: 'ok', command: toyQueue.command });
+    if (toolName === 'toy_set_speed') {
+      const val = args.value;
+      toyQueue.command = { action: 'intensity', value: val, received: Date.now() };
+      toyQueue.timestamp = Date.now();
+      console.log(`📥 糯叽叽指令: 强度 ${val}%`);
+      return res.json({
+        content: [{ type: 'text', text: `✅ 已设置强度为 ${val}%` }]
+      });
+    }
+
+    if (toolName === 'toy_stop') {
+      toyQueue.command = { action: 'intensity', value: 0, received: Date.now() };
+      toyQueue.timestamp = Date.now();
+      console.log('📥 糯叽叽指令: 停止');
+      return res.json({
+        content: [{ type: 'text', text: '✅ 已停止' }]
+      });
+    }
+
+    return res.json({ error: `未知工具: ${toolName}` });
+  }
+
+  // 兼容旧方式：直接发送指令
+  if (action) {
+    toyQueue.command = { action, value, received: Date.now() };
+    toyQueue.timestamp = Date.now();
+    console.log(`📥 糯叽叽指令: ${action} = ${value}`);
+    return res.json({ status: 'ok', command: toyQueue.command });
+  }
+
+  res.json({ error: '未知请求' });
 });
 
 app.listen(PORT, () => {
