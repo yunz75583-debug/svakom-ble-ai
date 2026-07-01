@@ -57,32 +57,49 @@ app.get('/status', (req, res) => {
 app.post('/', (req, res) => {
   console.log('📥 糯叽叽请求:', JSON.stringify(req.body, null, 2));
 
-  const { method, params } = req.body;
+  const { jsonrpc, id, method, params } = req.body;
+
+  // 处理 initialize
+  if (method === 'initialize') {
+    return res.json({
+      jsonrpc: '2.0',
+      id: id,
+      result: {
+        protocolVersion: '2025-03-26',
+        capabilities: { tools: {} },
+        serverInfo: { name: 'svakom-bridge', version: '1.0.0' }
+      }
+    });
+  }
 
   // 处理 tools/list
   if (method === 'tools/list') {
     return res.json({
-      tools: [
-        {
-          name: 'toy_set_speed',
-          description: '设置玩具强度 (0-100)',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              value: { type: 'number', minimum: 0, maximum: 100 }
-            },
-            required: ['value']
+      jsonrpc: '2.0',
+      id: id,
+      result: {
+        tools: [
+          {
+            name: 'toy_set_speed',
+            description: '设置玩具强度 (0-100)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                value: { type: 'number', minimum: 0, maximum: 100 }
+              },
+              required: ['value']
+            }
+          },
+          {
+            name: 'toy_stop',
+            description: '停止玩具',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
           }
-        },
-        {
-          name: 'toy_stop',
-          description: '停止玩具',
-          inputSchema: {
-            type: 'object',
-            properties: {}
-          }
-        }
-      ]
+        ]
+      }
     });
   }
 
@@ -96,7 +113,11 @@ app.post('/', (req, res) => {
       toyQueue.command = { action: 'intensity', value: val, received: Date.now() };
       toyQueue.timestamp = Date.now();
       return res.json({
-        content: [{ type: 'text', text: `✅ 已设置强度为 ${val}%` }]
+        jsonrpc: '2.0',
+        id: id,
+        result: {
+          content: [{ type: 'text', text: `✅ 已设置强度为 ${val}%` }]
+        }
       });
     }
 
@@ -104,15 +125,23 @@ app.post('/', (req, res) => {
       toyQueue.command = { action: 'intensity', value: 0, received: Date.now() };
       toyQueue.timestamp = Date.now();
       return res.json({
-        content: [{ type: 'text', text: '✅ 已停止' }]
+        jsonrpc: '2.0',
+        id: id,
+        result: {
+          content: [{ type: 'text', text: '✅ 已停止' }]
+        }
       });
     }
 
-    return res.json({ content: [{ type: 'text', text: `❌ 未知工具: ${toolName}` }] });
+    return res.json({
+      jsonrpc: '2.0',
+      id: id,
+      error: { code: -32601, message: `未知工具: ${toolName}` }
+    });
   }
 
-  // 其他情况
-  res.json({ content: [{ type: 'text', text: '收到请求' }] });
+  // 其他请求
+  res.json({ jsonrpc: '2.0', id: id, result: {} });
 });
 
 app.listen(PORT, () => {
