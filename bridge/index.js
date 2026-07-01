@@ -18,15 +18,25 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// ===== 接收指令 =====
+// ===== 接收指令（兼容 HTTP 调用） =====
 app.post('/toy', (req, res) => {
-  const { secret, action, value } = req.body;
+  const { secret, action, value, pattern, level } = req.body;
   if (secret !== toyQueue.secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  toyQueue.command = { action, value, received: Date.now() };
+  
+  if (action === 'intensity') {
+    toyQueue.command = { action: 'intensity', value: value, received: Date.now() };
+  } else if (action === 'pattern') {
+    toyQueue.command = { action: 'pattern', pattern: pattern, level: level || 3, received: Date.now() };
+  } else if (action === 'stop') {
+    toyQueue.command = { action: 'stop', received: Date.now() };
+  } else {
+    return res.status(400).json({ error: '未知 action' });
+  }
+  
   toyQueue.timestamp = Date.now();
-  console.log(`📥 指令: ${action} = ${value}`);
+  console.log(`📥 指令: ${action}`, req.body);
   res.json({ status: 'ok' });
 });
 
@@ -91,6 +101,18 @@ app.post('/', (req, res) => {
             }
           },
           {
+            name: 'toy_set_pattern',
+            description: '设置振动花样 (1-8)，等级 (1-5，可选，默认3)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                pattern: { type: 'number', minimum: 1, maximum: 8 },
+                level: { type: 'number', minimum: 1, maximum: 5 }
+              },
+              required: ['pattern']
+            }
+          },
+          {
             name: 'toy_stop',
             description: '停止玩具',
             inputSchema: {
@@ -121,8 +143,22 @@ app.post('/', (req, res) => {
       });
     }
 
+    if (toolName === 'toy_set_pattern') {
+      const pattern = args.pattern;
+      const level = args.level || 3;
+      toyQueue.command = { action: 'pattern', pattern: pattern, level: level, received: Date.now() };
+      toyQueue.timestamp = Date.now();
+      return res.json({
+        jsonrpc: '2.0',
+        id: id,
+        result: {
+          content: [{ type: 'text', text: `✅ 已设置花样 ${pattern}，等级 ${level}` }]
+        }
+      });
+    }
+
     if (toolName === 'toy_stop') {
-      toyQueue.command = { action: 'intensity', value: 0, received: Date.now() };
+      toyQueue.command = { action: 'stop', received: Date.now() };
       toyQueue.timestamp = Date.now();
       return res.json({
         jsonrpc: '2.0',
@@ -140,7 +176,6 @@ app.post('/', (req, res) => {
     });
   }
 
-  // 其他请求
   res.json({ jsonrpc: '2.0', id: id, result: {} });
 });
 
