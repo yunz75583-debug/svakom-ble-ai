@@ -396,14 +396,11 @@
             try {
                 setStatus('connecting', '扫描中...');
                 connectBleBtn.disabled = true;
-                logMessage('🔍 扫描 SVAKOM 设备...', '');
+                logMessage('🔍 扫描蓝牙设备...', '');
 
                 bleDevice = await navigator.bluetooth.requestDevice({
-                    filters: [
-                        { name: 'SL278H' },
-                        { namePrefix: 'SVAKOM' },
-                    ],
-                    optionalServices: [SERVICE_UUID],
+                    acceptAllDevices: true,
+                    optionalServices: [SERVICE_UUID]
                 });
 
                 logMessage(`✅ 找到: ${bleDevice.name || '未知'}`, 'success');
