@@ -7,7 +7,6 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(express.json());
 
-// 指令队列
 const toyQueue = {
   command: null,
   timestamp: 0,
@@ -16,37 +15,31 @@ const toyQueue = {
 
 // ===== 健康检查 =====
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'SVAKOM BLE Bridge' });
+  res.json({ status: 'ok' });
 });
 
 // ===== 接收指令 =====
 app.post('/toy', (req, res) => {
   const { secret, action, value } = req.body;
-
   if (secret !== toyQueue.secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-
   toyQueue.command = { action, value, received: Date.now() };
   toyQueue.timestamp = Date.now();
-
-  console.log(`📥 收到指令: ${action} = ${value}`);
-  res.json({ status: 'ok', command: toyQueue.command });
+  console.log(`📥 指令: ${action} = ${value}`);
+  res.json({ status: 'ok' });
 });
 
-// ===== 网页中继轮询 =====
+// ===== 网页轮询 =====
 app.get('/toy-next', (req, res) => {
   const { secret } = req.query;
-
   if (secret !== toyQueue.secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-
   const age = Date.now() - toyQueue.timestamp;
   if (age > 5000) {
     return res.json({ command: null });
   }
-
   const cmd = toyQueue.command;
   toyQueue.command = null;
   res.json({ command: cmd });
@@ -56,18 +49,17 @@ app.get('/toy-next', (req, res) => {
 app.get('/status', (req, res) => {
   res.json({
     hasCommand: toyQueue.command !== null,
-    timestamp: toyQueue.timestamp,
     age: Date.now() - toyQueue.timestamp
   });
 });
 
-// ===== 糯叽叽入口 =====
+// ===== 糯叽叽 MCP 入口 =====
 app.post('/', (req, res) => {
-  console.log('📥 糯叽叽请求体:', req.body);
+  console.log('📥 糯叽叽请求:', JSON.stringify(req.body, null, 2));
 
   const { method, params } = req.body;
 
-  // 返回工具列表
+  // 处理 tools/list
   if (method === 'tools/list') {
     return res.json({
       tools: [
@@ -94,7 +86,7 @@ app.post('/', (req, res) => {
     });
   }
 
-  // 调用工具
+  // 处理 tools/call
   if (method === 'tools/call') {
     const toolName = params?.name;
     const args = params?.arguments || {};
@@ -116,12 +108,13 @@ app.post('/', (req, res) => {
       });
     }
 
-    return res.json({ error: `未知工具: ${toolName}` });
+    return res.json({ content: [{ type: 'text', text: `❌ 未知工具: ${toolName}` }] });
   }
 
-  res.json({ error: '未知请求' });
+  // 其他情况
+  res.json({ content: [{ type: 'text', text: '收到请求' }] });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 服务运行在端口 ${PORT}`);
 });
