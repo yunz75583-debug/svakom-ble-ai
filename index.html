@@ -203,7 +203,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 音频保活版（基于调试版）
+        // SVAKOM SL278H 网页中继 - 音频保活版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -266,13 +266,13 @@
                 oscillator.connect(gainNode);
                 gainNode.connect(audioCtx.destination);
                 oscillator.start();
-                
+                
                 audioInterval = setInterval(() => {
                     if (audioCtx && audioCtx.state === 'suspended') {
                         audioCtx.resume().catch(() => {});
                     }
                 }, 10000);
-                
+                
                 isAudioActive = true;
                 logMessage('🔊 无声音频保活已启动', 'success');
             } catch (e) {
@@ -365,7 +365,7 @@
         // ===== 轮询云端（调试版） =====
         async function pollCloud() {
             logMessage('🔍 pollCloud 被调用了', 'info');
-            
+            
             if (!isRelayConnected) {
                 logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
                 return;
@@ -382,10 +382,10 @@
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
                 logMessage(`🔍 轮询请求: ${url}`, 'info');
-                
+                
                 const resp = await fetch(url);
                 logMessage(`🔍 响应状态: ${resp.status}`, 'info');
-                
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
@@ -401,7 +401,7 @@
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
-                    
+                    
                     if (cmd.action === 'intensity') {
                         const val = cmd.value;
                         logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
@@ -442,7 +442,7 @@
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
             logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
-            
+            
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
@@ -512,8 +512,6 @@
             connectBleBtn.disabled = false;
             deviceName.textContent = '-';
             logMessage('🔌 蓝牙已断开', '');
-            // 可选：断开时停止音频保活
-            // stopAudioKeepAlive();
         }
 
         // ===== 事件绑定 =====
