@@ -138,7 +138,7 @@
             font-size: 11px;
             font-family: "Courier New", monospace;
             color: rgba(255,255,255,0.5);
-            max-height: 120px;
+            max-height: 150px;
             overflow-y: auto;
             word-break: break-all;
             line-height: 1.8;
@@ -158,7 +158,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 振荡器保活版</p>
+        <p class="subtitle">SL278H · 媒体保活测试</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -178,9 +178,10 @@
             <button class="btn btn-secondary" id="connectBleBtn" style="flex:1; padding:12px;">🔵 连接蓝牙</button>
         </div>
 
-        <!-- 手动保活按钮 -->
-        <div style="margin-top:8px;">
-            <button class="btn btn-success" id="keepAliveBtn" style="padding:12px;">🔊 启动振荡器保活</button>
+        <!-- 媒体播放按钮 -->
+        <div style="margin-top:8px; display:flex; gap:10px;">
+            <button class="btn btn-success" id="playMediaBtn" style="flex:1; padding:12px;">🎵 播放保活媒体</button>
+            <button class="btn btn-danger" id="stopMediaBtn" style="flex:1; padding:12px;">⏹ 停止</button>
         </div>
 
         <div class="control-section" id="controlSection">
@@ -212,7 +213,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 振荡器保活版
+        // SVAKOM SL278H 网页中继 - 媒体保活测试版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -230,12 +231,9 @@
         let relaySecret = '';
         let isRunning = false;
 
-        // ===== 振荡器保活 =====
-        let audioCtx = null;
-        let oscillator = null;
-        let gainNode = null;
-        let isAudioActive = false;
-        let resumeInterval = null;
+        // ===== 媒体保活 =====
+        let mediaElement = null;
+        let isMediaPlaying = false;
 
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
@@ -244,7 +242,8 @@
         const relaySecretInput = document.getElementById('relaySecret');
         const connectRelayBtn = document.getElementById('connectRelayBtn');
         const connectBleBtn = document.getElementById('connectBleBtn');
-        const keepAliveBtn = document.getElementById('keepAliveBtn');
+        const playMediaBtn = document.getElementById('playMediaBtn');
+        const stopMediaBtn = document.getElementById('stopMediaBtn');
         const intensitySlider = document.getElementById('intensitySlider');
         const intensityDisplay = document.getElementById('intensityDisplay');
         const controlSection = document.getElementById('controlSection');
@@ -264,60 +263,53 @@
             statusText.textContent = text;
         }
 
-        // ===== 手动启动振荡器保活 =====
-        function startOscillatorKeepAlive() {
-            if (isAudioActive) {
-                logMessage('🔊 振荡器保活已运行', 'info');
-                keepAliveBtn.textContent = '✅ 保活已启动';
-                return;
-            }
+        // ===== 播放媒体 =====
+        function playMedia() {
             try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (mediaElement) {
+                    mediaElement.remove();
+                    mediaElement = null;
+                }
                 
-                oscillator = audioCtx.createOscillator();
-                gainNode = audioCtx.createGain();
-                gainNode.gain.value = 0.001;
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                oscillator.frequency.value = 440;
-                oscillator.start();
+                mediaElement = document.createElement('video');
+                mediaElement.src = 'https://img.heliar.top/file/1772516513350_30min-osbvow_2.mp4';
+                mediaElement.loop = true;
+                mediaElement.muted = false;
+                mediaElement.playsInline = true;
+                mediaElement.controls = true;
+                mediaElement.style.width = '100%';
+                mediaElement.style.maxHeight = '120px';
+                mediaElement.style.marginTop = '8px';
+                mediaElement.style.borderRadius = '8px';
+                mediaElement.style.backgroundColor = '#000';
+                document.querySelector('.container').appendChild(mediaElement);
                 
-                resumeInterval = setInterval(() => {
-                    if (audioCtx && audioCtx.state === 'suspended') {
-                        audioCtx.resume().catch(() => {});
-                        logMessage('🔄 AudioContext 已恢复', 'info');
-                    }
-                }, 8000);
-                
-                isAudioActive = true;
-                keepAliveBtn.textContent = '✅ 保活已启动';
-                logMessage('🔊 振荡器保活已启动（完全静音）', 'success');
-                logMessage('💡 切后台或锁屏后会自动恢复', 'info');
+                const playPromise = mediaElement.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        logMessage('🎵 媒体已开始播放', 'success');
+                        isMediaPlaying = true;
+                        playMediaBtn.textContent = '✅ 媒体播放中';
+                    }).catch((e) => {
+                        logMessage(`⚠️ 媒体播放失败: ${e.message}`, 'error');
+                    });
+                }
             } catch (e) {
-                logMessage(`⚠️ 振荡器保活启动失败: ${e.message}`, 'error');
-                keepAliveBtn.textContent = '❌ 启动失败';
+                logMessage(`⚠️ 媒体启动失败: ${e.message}`, 'error');
             }
         }
 
-        function stopOscillatorKeepAlive() {
-            if (resumeInterval) {
-                clearInterval(resumeInterval);
-                resumeInterval = null;
+        function stopMedia() {
+            if (mediaElement) {
+                try {
+                    mediaElement.pause();
+                    mediaElement.remove();
+                } catch (e) {}
+                mediaElement = null;
             }
-            if (oscillator) {
-                try { oscillator.stop(); } catch (e) {}
-                oscillator = null;
-            }
-            if (gainNode) {
-                gainNode = null;
-            }
-            if (audioCtx) {
-                try { audioCtx.close(); } catch (e) {}
-                audioCtx = null;
-            }
-            isAudioActive = false;
-            keepAliveBtn.textContent = '🔊 启动振荡器保活';
-            logMessage('🔇 振荡器保活已停止', 'info');
+            isMediaPlaying = false;
+            playMediaBtn.textContent = '🎵 播放保活媒体';
+            logMessage('⏹ 媒体已停止', 'info');
         }
 
         function buildCommand(intensity) {
@@ -540,7 +532,8 @@
         // ===== 事件绑定 =====
         connectRelayBtn.addEventListener('click', connectRelay);
         connectBleBtn.addEventListener('click', connectBle);
-        keepAliveBtn.addEventListener('click', startOscillatorKeepAlive);
+        playMediaBtn.addEventListener('click', playMedia);
+        stopMediaBtn.addEventListener('click', stopMedia);
 
         intensitySlider.addEventListener('input', (e) => {
             const val = parseInt(e.target.value);
@@ -574,9 +567,9 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（振荡器保活版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（媒体保活测试版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
-        logMessage('💡 点击「启动振荡器保活」按钮启用保活', '');
+        logMessage('💡 点击「播放保活媒体」测试后台保活', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
         const savedSecret = localStorage.getItem('relaySecret');
