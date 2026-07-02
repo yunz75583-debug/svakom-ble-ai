@@ -80,6 +80,10 @@
             color: #fff;
             border: 1px solid rgba(255,255,255,0.15);
         }
+        .btn-success {
+            background: linear-gradient(135deg, #2ed573, #1e90ff);
+            color: #fff;
+        }
         .input-group {
             margin-top: 12px;
             display: flex;
@@ -154,7 +158,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 回退版</p>
+        <p class="subtitle">SL278H · 独立音频保活版</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -172,6 +176,11 @@
         <div style="display:flex; gap:10px; margin-top:8px;">
             <button class="btn btn-secondary" id="connectRelayBtn" style="flex:1; padding:12px;">🔗 连接中继</button>
             <button class="btn btn-secondary" id="connectBleBtn" style="flex:1; padding:12px;">🔵 连接蓝牙</button>
+        </div>
+
+        <!-- ===== 新增：独立的音频播放按钮 ===== -->
+        <div style="margin-top:8px;">
+            <button class="btn btn-success" id="playAudioBtn" style="padding:12px;">🔊 播放音频（保活）</button>
         </div>
 
         <div class="control-section" id="controlSection">
@@ -203,7 +212,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 回退版
+        // SVAKOM SL278H 网页中继 - 独立音频保活版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -221,8 +230,9 @@
         let relaySecret = '';
         let isRunning = false;
 
-        // ===== 保活测试 =====
+        // ===== 音频保活 =====
         let audioElement = null;
+        let isAudioActive = false;
 
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
@@ -231,6 +241,7 @@
         const relaySecretInput = document.getElementById('relaySecret');
         const connectRelayBtn = document.getElementById('connectRelayBtn');
         const connectBleBtn = document.getElementById('connectBleBtn');
+        const playAudioBtn = document.getElementById('playAudioBtn');
         const intensitySlider = document.getElementById('intensitySlider');
         const intensityDisplay = document.getElementById('intensityDisplay');
         const controlSection = document.getElementById('controlSection');
@@ -250,28 +261,52 @@
             statusText.textContent = text;
         }
 
-        // ===== 简单音频保活测试 =====
+        // ===== 独立的音频播放函数（由按钮触发） =====
         function startAudioKeepAlive() {
+            if (isAudioActive) {
+                logMessage('🔊 音频保活已运行', 'info');
+                playAudioBtn.textContent = '✅ 音频已播放';
+                return;
+            }
             try {
-                // 如果已经存在则跳过
+                // 如果已存在则移除旧的
                 if (audioElement) {
-                    logMessage('🔊 音频已存在', 'info');
-                    return;
+                    audioElement.remove();
+                    audioElement = null;
                 }
+                
                 audioElement = document.createElement('audio');
                 audioElement.loop = true;
-                audioElement.volume = 0.01;
-                audioElement.style.display = 'none';
+                audioElement.volume = 0.1;
+                audioElement.controls = true;
+                audioElement.style.position = 'fixed';
+                audioElement.style.bottom = '10px';
+                audioElement.style.right = '10px';
+                audioElement.style.width = '140px';
+                audioElement.style.height = '44px';
+                audioElement.style.zIndex = '9999';
+                audioElement.style.opacity = '0.5';
+                audioElement.style.borderRadius = '8px';
                 audioElement.src = 'https://raw.githubusercontent.com/yunz75583-debug/svakom-ble-ai/main/silent_30min.mp3';
                 document.body.appendChild(audioElement);
-                
-                audioElement.play().then(() => {
-                    logMessage('🔊 音频保活已启动', 'success');
-                }).catch((e) => {
-                    logMessage(`⚠️ 音频播放失败: ${e.message}`, 'error');
-                });
+                
+                const playPromise = audioElement.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        logMessage('🔊 音频已开始播放', 'success');
+                        isAudioActive = true;
+                        playAudioBtn.textContent = '✅ 音频已播放';
+                    }).catch((e) => {
+                        logMessage(`⚠️ 音频播放失败: ${e.message}`, 'error');
+                        // 如果失败，移除控件
+                        if (audioElement) {
+                            audioElement.remove();
+                            audioElement = null;
+                        }
+                    });
+                }
             } catch (e) {
-                logMessage(`⚠️ 启动失败: ${e.message}`, 'error');
+                logMessage(`⚠️ 音频保活启动失败: ${e.message}`, 'error');
             }
         }
 
@@ -282,8 +317,10 @@
                     audioElement.remove();
                 } catch (e) {}
                 audioElement = null;
-                logMessage('🔇 音频已停止', 'info');
             }
+            isAudioActive = false;
+            playAudioBtn.textContent = '🔊 播放音频（保活）';
+            logMessage('🔇 音频已停止', 'info');
         }
 
         function buildCommand(intensity) {
@@ -358,7 +395,7 @@
         // ===== 轮询云端 =====
         async function pollCloud() {
             logMessage('🔍 pollCloud 被调用了', 'info');
-            
+            
             if (!isRelayConnected) {
                 logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
                 return;
@@ -375,10 +412,10 @@
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
                 logMessage(`🔍 轮询请求: ${url}`, 'info');
-                
+                
                 const resp = await fetch(url);
                 logMessage(`🔍 响应状态: ${resp.status}`, 'info');
-                
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
@@ -394,7 +431,7 @@
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
-                    
+                    
                     if (cmd.action === 'intensity') {
                         const val = cmd.value;
                         logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
@@ -435,7 +472,7 @@
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
             logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
-            
+            
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
@@ -458,9 +495,6 @@
                 return;
             }
             try {
-                // ===== 启动音频保活 =====
-                startAudioKeepAlive();
-
                 setStatus('connecting', '扫描中...');
                 connectBleBtn.disabled = true;
                 logMessage('🔍 扫描蓝牙设备...', '');
@@ -504,12 +538,16 @@
             connectBleBtn.disabled = false;
             deviceName.textContent = '-';
             logMessage('🔌 蓝牙已断开', '');
+            // 断开蓝牙时自动停止音频
             stopAudioKeepAlive();
         }
 
         // ===== 事件绑定 =====
         connectRelayBtn.addEventListener('click', connectRelay);
         connectBleBtn.addEventListener('click', connectBle);
+        
+        // ===== 独立的音频播放按钮 =====
+        playAudioBtn.addEventListener('click', startAudioKeepAlive);
 
         intensitySlider.addEventListener('input', (e) => {
             const val = parseInt(e.target.value);
@@ -543,8 +581,9 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（回退版 + 保活测试）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（独立音频保活版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
+        logMessage('💡 点击「播放音频」按钮启动保活', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
         const savedSecret = localStorage.getItem('relaySecret');
