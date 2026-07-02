@@ -24,7 +24,7 @@ app.post('/toy', (req, res) => {
   if (secret !== toyQueue.secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  
+  
   try {
     if (action === 'intensity') {
       toyQueue.command = { action: 'intensity', value: value, received: Date.now() };
@@ -50,12 +50,12 @@ app.get('/toy-next', (req, res) => {
   if (secret !== toyQueue.secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  
+  
   const age = Date.now() - toyQueue.timestamp;
   if (age > 5000) {
     return res.json({ command: null });
   }
-  
+  
   const cmd = toyQueue.command;
   toyQueue.command = null;
   console.log(`📤 中继取走指令:`, cmd);
@@ -76,7 +76,6 @@ app.post('/', (req, res) => {
 
   const { jsonrpc, id, method, params } = req.body;
 
-  // 处理 initialize
   if (method === 'initialize') {
     return res.json({
       jsonrpc: '2.0',
@@ -89,7 +88,6 @@ app.post('/', (req, res) => {
     });
   }
 
-  // 处理 tools/list
   if (method === 'tools/list') {
     return res.json({
       jsonrpc: '2.0',
@@ -132,17 +130,16 @@ app.post('/', (req, res) => {
     });
   }
 
-  // ===== 处理 tools/call =====
   if (method === 'tools/call') {
     try {
-      const toolName = params?.name;
+      const toolName = params?.name?.toLowerCase();
       const args = params?.arguments || {};
 
       console.log(`🔍 收到工具调用: ${toolName}`, args);
 
       if (toolName === 'toy_set_speed') {
         const val = typeof args.value === 'number' ? args.value : 0;
-        // ✅ 写入队列
+        // ✅ 强制写入队列
         toyQueue.command = { action: 'intensity', value: val, received: Date.now() };
         toyQueue.timestamp = Date.now();
         console.log(`📥 存入队列: 强度 ${val}%`);
@@ -158,7 +155,7 @@ app.post('/', (req, res) => {
       if (toolName === 'toy_set_pattern') {
         const pattern = typeof args.pattern === 'number' ? args.pattern : 1;
         const level = typeof args.level === 'number' ? args.level : 3;
-        // ✅ 写入队列
+        // ✅ 强制写入队列
         toyQueue.command = { action: 'pattern', pattern: pattern, level: level, received: Date.now() };
         toyQueue.timestamp = Date.now();
         console.log(`📥 存入队列: 花样 ${pattern}，等级 ${level}`);
@@ -172,7 +169,7 @@ app.post('/', (req, res) => {
       }
 
       if (toolName === 'toy_stop') {
-        // ✅ 写入队列
+        // ✅ 强制写入队列
         toyQueue.command = { action: 'stop', received: Date.now() };
         toyQueue.timestamp = Date.now();
         console.log(`📥 存入队列: 停止`);
