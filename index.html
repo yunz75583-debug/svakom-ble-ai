@@ -530,4 +530,60 @@
         }
 
         // ===== 事件绑定 =====
-        connect
+        connectRelayBtn.addEventListener('click', connectRelay);
+        connectBleBtn.addEventListener('click', connectBle);
+        playMediaBtn.addEventListener('click', playMedia);
+        stopMediaBtn.addEventListener('click', stopMedia);
+
+        intensitySlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            setIntensity(val);
+            document.querySelectorAll('[data-intensity]').forEach(b => {
+                b.classList.toggle('active', parseInt(b.dataset.intensity) === val);
+            });
+        });
+
+        document.querySelectorAll('[data-intensity]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const val = parseInt(btn.dataset.intensity);
+                setIntensity(val);
+                document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            });
+        });
+
+        stopBtn.addEventListener('click', () => {
+            setIntensity(0);
+            document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
+            logMessage('⏹ 已停止', '');
+        });
+
+        testBtn.addEventListener('click', async () => {
+            if (!isBleConnected) { logMessage('❌ 请先连接蓝牙', 'error'); return; }
+            logMessage('🔬 测试: 发送 30%...', '');
+            await sendBleCommand(30);
+            setTimeout(async () => { await sendBleCommand(0); logMessage('⏹ 测试停止', ''); }, 500);
+        });
+
+        // ===== 启动 =====
+        setStatus('disconnected', '未连接');
+        logMessage('📡 SVAKOM 网页中继已加载（媒体保活测试版）', '');
+        logMessage('💡 先连接中继，再连接蓝牙', '');
+        logMessage('💡 点击「播放保活媒体」测试后台保活', '');
+
+        const savedUrl = localStorage.getItem('relayUrl');
+        const savedSecret = localStorage.getItem('relaySecret');
+        if (savedUrl) relayUrlInput.value = savedUrl;
+        if (savedSecret) relaySecretInput.value = savedSecret;
+
+        relayUrlInput.addEventListener('change', () => localStorage.setItem('relayUrl', relayUrlInput.value));
+        relaySecretInput.addEventListener('change', () => localStorage.setItem('relaySecret', relaySecretInput.value));
+
+        if (!navigator.bluetooth) {
+            logMessage('⚠️ 请使用 Bluefy 浏览器打开', 'error');
+        } else {
+            logMessage('✅ Web Bluetooth 可用', 'success');
+        }
+    </script>
+</body>
+</html>
