@@ -24,7 +24,7 @@ app.post('/toy', (req, res) => {
   if (secret !== toyQueue.secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  
+  
   if (action === 'intensity') {
     toyQueue.command = { action: 'intensity', value: value, received: Date.now() };
   } else if (action === 'pattern') {
@@ -34,9 +34,9 @@ app.post('/toy', (req, res) => {
   } else {
     return res.status(400).json({ error: '未知 action' });
   }
-  
+  
   toyQueue.timestamp = Date.now();
-  console.log(`📥 指令: ${action}`, req.body);
+  console.log(`📥 收到指令: ${action}`, req.body);
   res.json({ status: 'ok' });
 });
 
@@ -52,6 +52,7 @@ app.get('/toy-next', (req, res) => {
   }
   const cmd = toyQueue.command;
   toyQueue.command = null;
+  console.log(`📤 中继取走指令:`, cmd);
   res.json({ command: cmd });
 });
 
@@ -102,7 +103,7 @@ app.post('/', (req, res) => {
           },
           {
             name: 'toy_set_pattern',
-            description: '设置振动花样 (1-8)，等级 (1-5，可选，默认3)',
+            description: '设置振动花样 (1-8)',
             inputSchema: {
               type: 'object',
               properties: {
@@ -132,8 +133,10 @@ app.post('/', (req, res) => {
 
     if (toolName === 'toy_set_speed') {
       const val = args.value;
+      // ✅ 存入队列
       toyQueue.command = { action: 'intensity', value: val, received: Date.now() };
       toyQueue.timestamp = Date.now();
+      console.log(`📥 糯叽叽指令: 强度 ${val}%`);
       return res.json({
         jsonrpc: '2.0',
         id: id,
@@ -146,8 +149,10 @@ app.post('/', (req, res) => {
     if (toolName === 'toy_set_pattern') {
       const pattern = args.pattern;
       const level = args.level || 3;
+      // ✅ 存入队列
       toyQueue.command = { action: 'pattern', pattern: pattern, level: level, received: Date.now() };
       toyQueue.timestamp = Date.now();
+      console.log(`📥 糯叽叽指令: 花样 ${pattern}，等级 ${level}`);
       return res.json({
         jsonrpc: '2.0',
         id: id,
@@ -158,8 +163,10 @@ app.post('/', (req, res) => {
     }
 
     if (toolName === 'toy_stop') {
+      // ✅ 存入队列
       toyQueue.command = { action: 'stop', received: Date.now() };
       toyQueue.timestamp = Date.now();
+      console.log(`📥 糯叽叽指令: 停止`);
       return res.json({
         jsonrpc: '2.0',
         id: id,
