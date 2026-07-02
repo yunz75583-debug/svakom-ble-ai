@@ -255,7 +255,6 @@
             return new Uint8Array([0x55, 0x04, 0x00, 0x00, 0x01, value, 0xAA]);
         }
 
-        // ===== 发送花样指令 =====
         async function sendPatternCommand(pattern, level) {
             if (!bleChar || !isBleConnected) {
                 logMessage('❌ 蓝牙未连接', 'error');
@@ -314,16 +313,23 @@
             else if (isBleConnected) startKeepalive(value);
         }
 
-        // ===== 轮询云端 =====
+        // ===== 轮询云端（修复版） =====
         async function pollCloud() {
             if (!isRelayConnected || !relayUrl || !relaySecret) return;
             try {
-                const resp = await fetch(`${relayUrl}/toy-next?secret=${relaySecret}`);
+                const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
+                const resp = await fetch(url);
                 if (!resp.ok) {
-                    if (resp.status === 401) { logMessage('❌ 中继密码错误', 'error'); isRelayConnected = false; }
+                    if (resp.status === 401) {
+                        logMessage('❌ 中继密码错误', 'error');
+                        isRelayConnected = false;
+                        return;
+                    }
                     return;
                 }
                 const data = await resp.json();
+                logMessage(`🔍 取到数据: ${JSON.stringify(data)}`, 'info');
+
                 if (!data.command) return;
 
                 const cmd = data.command;
@@ -357,7 +363,6 @@
             if (pollTimer) { clearInterval(pollTimer); pollTimer = null; logMessage('⏹ 停止轮询', ''); }
         }
 
-        // ===== 连接中继 =====
         async function connectRelay() {
             const url = relayUrlInput.value.trim();
             const secret = relaySecretInput.value.trim();
@@ -380,7 +385,6 @@
             }
         }
 
-        // ===== 连接蓝牙 =====
         async function connectBle() {
             if (!navigator.bluetooth) {
                 logMessage('❌ 请使用 Bluefy 浏览器打开', 'error');
