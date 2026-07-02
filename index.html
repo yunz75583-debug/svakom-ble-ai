@@ -154,7 +154,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 音频保活版</p>
+        <p class="subtitle">SL278H · 回退版</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -203,7 +203,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 可见音频保活版
+        // SVAKOM SL278H 网页中继 - 回退版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -221,9 +221,8 @@
         let relaySecret = '';
         let isRunning = false;
 
-        // ===== 音频保活相关 =====
+        // ===== 保活测试 =====
         let audioElement = null;
-        let isAudioActive = false;
 
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
@@ -251,42 +250,28 @@
             statusText.textContent = text;
         }
 
-        // ===== 可见音频保活 =====
+        // ===== 简单音频保活测试 =====
         function startAudioKeepAlive() {
-            if (isAudioActive) {
-                logMessage('🔊 音频保活已运行', 'info');
-                return;
-            }
             try {
+                // 如果已经存在则跳过
+                if (audioElement) {
+                    logMessage('🔊 音频已存在', 'info');
+                    return;
+                }
                 audioElement = document.createElement('audio');
                 audioElement.loop = true;
                 audioElement.volume = 0.01;
-                audioElement.controls = true;
-                audioElement.style.position = 'fixed';
-                audioElement.style.bottom = '10px';
-                audioElement.style.right = '10px';
-                audioElement.style.width = '120px';
-                audioElement.style.height = '40px';
-                audioElement.style.zIndex = '9999';
-                audioElement.style.opacity = '0.3';
+                audioElement.style.display = 'none';
                 audioElement.src = 'https://raw.githubusercontent.com/yunz75583-debug/svakom-ble-ai/main/silent_30min.mp3';
                 document.body.appendChild(audioElement);
-                
-                const playPromise = audioElement.play();
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        logMessage('🔊 音频已开始播放', 'success');
-                        isAudioActive = true;
-                    }).catch((e) => {
-                        logMessage(`⚠️ 音频播放失败: ${e.message}`, 'error');
-                        document.addEventListener('click', function resumePlay() {
-                            audioElement.play().catch(() => {});
-                            document.removeEventListener('click', resumePlay);
-                        }, { once: true });
-                    });
-                }
+                
+                audioElement.play().then(() => {
+                    logMessage('🔊 音频保活已启动', 'success');
+                }).catch((e) => {
+                    logMessage(`⚠️ 音频播放失败: ${e.message}`, 'error');
+                });
             } catch (e) {
-                logMessage(`⚠️ 音频保活启动失败: ${e.message}`, 'error');
+                logMessage(`⚠️ 启动失败: ${e.message}`, 'error');
             }
         }
 
@@ -297,9 +282,8 @@
                     audioElement.remove();
                 } catch (e) {}
                 audioElement = null;
+                logMessage('🔇 音频已停止', 'info');
             }
-            isAudioActive = false;
-            logMessage('🔇 音频保活已停止', 'info');
         }
 
         function buildCommand(intensity) {
@@ -374,7 +358,7 @@
         // ===== 轮询云端 =====
         async function pollCloud() {
             logMessage('🔍 pollCloud 被调用了', 'info');
-            
+            
             if (!isRelayConnected) {
                 logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
                 return;
@@ -391,10 +375,10 @@
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
                 logMessage(`🔍 轮询请求: ${url}`, 'info');
-                
+                
                 const resp = await fetch(url);
                 logMessage(`🔍 响应状态: ${resp.status}`, 'info');
-                
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
@@ -410,7 +394,7 @@
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
-                    
+                    
                     if (cmd.action === 'intensity') {
                         const val = cmd.value;
                         logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
@@ -451,7 +435,7 @@
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
             logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
-            
+            
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
@@ -496,7 +480,6 @@
                 controlSection.classList.add('active');
                 connectBleBtn.textContent = '✅ 蓝牙已连接';
                 logMessage('🎉 蓝牙就绪！等待云端指令...', 'success');
-                logMessage('🔊 音频保活已激活', 'info');
                 bleDevice.addEventListener('gattserverdisconnected', () => {
                     logMessage('⚠️ 蓝牙断开', 'error');
                     disconnectBle();
@@ -560,9 +543,8 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（可见音频保活版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（回退版 + 保活测试）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
-        logMessage('💡 连接蓝牙时会自动启动音频保活', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
         const savedSecret = localStorage.getItem('relaySecret');
