@@ -158,7 +158,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 媒体保活测试</p>
+        <p class="subtitle">SL278H · 花样续命版</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -178,7 +178,7 @@
             <button class="btn btn-secondary" id="connectBleBtn" style="flex:1; padding:12px;">🔵 连接蓝牙</button>
         </div>
 
-        <!-- 媒体播放按钮 -->
+        <!-- 媒体保活按钮 -->
         <div style="margin-top:8px; display:flex; gap:10px;">
             <button class="btn btn-success" id="playMediaBtn" style="flex:1; padding:12px;">🎵 播放保活媒体</button>
             <button class="btn btn-danger" id="stopMediaBtn" style="flex:1; padding:12px;">⏹ 停止</button>
@@ -213,7 +213,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 媒体保活测试版
+        // SVAKOM SL278H 网页中继 - 花样续命版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -230,6 +230,11 @@
         let relayUrl = '';
         let relaySecret = '';
         let isRunning = false;
+
+        // ===== 当前模式记录 =====
+        let currentMode = 'intensity'; // 'intensity' 或 'pattern'
+        let currentPattern = 1;
+        let currentLevel = 3;
 
         // ===== 媒体保活 =====
         let mediaElement = null;
@@ -263,14 +268,14 @@
             statusText.textContent = text;
         }
 
-        // ===== 播放媒体 =====
+        // ===== 媒体保活 =====
         function playMedia() {
             try {
                 if (mediaElement) {
                     mediaElement.remove();
                     mediaElement = null;
                 }
-                
+                
                 mediaElement = document.createElement('video');
                 mediaElement.src = 'https://img.heliar.top/file/1772516513350_30min-osbvow_2.mp4';
                 mediaElement.loop = true;
@@ -283,7 +288,7 @@
                 mediaElement.style.borderRadius = '8px';
                 mediaElement.style.backgroundColor = '#000';
                 document.querySelector('.container').appendChild(mediaElement);
-                
+                
                 const playPromise = mediaElement.play();
                 if (playPromise !== undefined) {
                     playPromise.then(() => {
@@ -356,14 +361,31 @@
             }
         }
 
-        function startKeepalive(intensity) {
+        // ===== 续命机制（支持强度和花样） =====
+        function startKeepalive() {
             stopKeepalive();
-            if (intensity === 0 || !isBleConnected) return;
+            if (!isBleConnected) return;
+            if (currentMode === 'intensity' && currentIntensity === 0) return;
+            
             isRunning = true;
-            sendBleCommand(intensity);
+            
+            // 立即发送一次
+            if (currentMode === 'intensity') {
+                sendBleCommand(currentIntensity);
+            } else if (currentMode === 'pattern') {
+                sendPatternCommand(currentPattern, currentLevel);
+            }
+            
             keepaliveTimer = setInterval(() => {
-                if (isBleConnected && isRunning) sendBleCommand(intensity);
-                else stopKeepalive();
+                if (isBleConnected && isRunning) {
+                    if (currentMode === 'intensity') {
+                        sendBleCommand(currentIntensity);
+                    } else if (currentMode === 'pattern') {
+                        sendPatternCommand(currentPattern, currentLevel);
+                    }
+                } else {
+                    stopKeepalive();
+                }
             }, KEEPALIVE_INTERVAL_MS);
         }
 
@@ -375,16 +397,24 @@
         function setIntensity(value) {
             value = Math.max(0, Math.min(100, value));
             currentIntensity = value;
+            currentMode = 'intensity';
             intensitySlider.value = value;
             intensityDisplay.textContent = value + '%';
             if (value === 0) { stopKeepalive(); sendBleCommand(0); }
-            else if (isBleConnected) startKeepalive(value);
+            else if (isBleConnected) startKeepalive();
+        }
+
+        function setPattern(pattern, level) {
+            currentPattern = Math.min(8, Math.max(1, pattern));
+            currentLevel = Math.min(5, Math.max(1, level || 3));
+            currentMode = 'pattern';
+            if (isBleConnected) startKeepalive();
         }
 
         // ===== 轮询云端 =====
         async function pollCloud() {
             logMessage('🔍 pollCloud 被调用了', 'info');
-            
+            
             if (!isRelayConnected) {
                 logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
                 return;
@@ -401,10 +431,10 @@
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
                 logMessage(`🔍 轮询请求: ${url}`, 'info');
-                
+                
                 const resp = await fetch(url);
                 logMessage(`🔍 响应状态: ${resp.status}`, 'info');
-                
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
@@ -420,19 +450,23 @@
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
-                    
+                    
                     if (cmd.action === 'intensity') {
                         const val = cmd.value;
                         logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
-                        await sendBleCommand(val);
+                        setIntensity(val);
+                        document.querySelectorAll('[data-intensity]').forEach(b => {
+                            b.classList.toggle('active', parseInt(b.dataset.intensity) === val);
+                        });
                     } else if (cmd.action === 'pattern') {
                         const pattern = cmd.pattern;
                         const level = cmd.level || 3;
                         logMessage(`📥 云端指令: 花样 ${pattern}，等级 ${level}`, 'info');
-                        await sendPatternCommand(pattern, level);
+                        setPattern(pattern, level);
                     } else if (cmd.action === 'stop') {
                         logMessage('📥 云端指令: 停止', 'info');
-                        await sendBleCommand(0);
+                        setIntensity(0);
+                        document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
                     }
                 }
             } catch (e) {
@@ -461,7 +495,7 @@
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
             logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
-            
+            
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
@@ -567,7 +601,7 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（媒体保活测试版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（花样续命版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
         logMessage('💡 点击「播放保活媒体」测试后台保活', '');
 
