@@ -134,7 +134,7 @@
             font-size: 11px;
             font-family: "Courier New", monospace;
             color: rgba(255,255,255,0.5);
-            max-height: 100px;
+            max-height: 120px;
             overflow-y: auto;
             word-break: break-all;
             line-height: 1.8;
@@ -203,7 +203,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继
+        // SVAKOM SL278H 网页中继 - 调试版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -316,16 +316,30 @@
             else if (isBleConnected) startKeepalive(value);
         }
 
-        // ===== 轮询云端（强制发送版） =====
+        // ===== 轮询云端（调试版） =====
         async function pollCloud() {
-            if (!isRelayConnected || !relayUrl || !relaySecret) {
-                logMessage('⚠️ 中继未连接，跳过轮询', 'error');
+            logMessage('🔍 pollCloud 被调用了', 'info');
+            
+            if (!isRelayConnected) {
+                logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
                 return;
             }
+            if (!relayUrl) {
+                logMessage('⚠️ relayUrl 为空，跳过轮询', 'error');
+                return;
+            }
+            if (!relaySecret) {
+                logMessage('⚠️ relaySecret 为空，跳过轮询', 'error');
+                return;
+            }
+
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
                 logMessage(`🔍 轮询请求: ${url}`, 'info');
+                
                 const resp = await fetch(url);
+                logMessage(`🔍 响应状态: ${resp.status}`, 'info');
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
@@ -338,12 +352,10 @@
                 const data = await resp.json();
                 logMessage(`🔍 取到数据: ${JSON.stringify(data)}`, 'info');
 
-                // 如果有指令，强制发送
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
                     
-                    // 强制发送蓝牙指令
                     if (cmd.action === 'intensity') {
                         const val = cmd.value;
                         logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
@@ -365,7 +377,10 @@
 
         function startPolling() {
             if (pollTimer) clearInterval(pollTimer);
-            pollTimer = setInterval(pollCloud, POLL_INTERVAL_MS);
+            logMessage('🔄 准备开始轮询...', 'info');
+            pollTimer = setInterval(() => {
+                pollCloud();
+            }, POLL_INTERVAL_MS);
             logMessage('🔄 开始轮询云端 (300ms)', 'info');
         }
 
@@ -380,6 +395,8 @@
             if (!secret) { logMessage('❌ 请输入中继密码', 'error'); return; }
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
+            logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
+            
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
@@ -483,7 +500,7 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载', '');
+        logMessage('📡 SVAKOM 网页中继已加载（调试版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
