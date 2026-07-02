@@ -153,12 +153,25 @@
             font-size: 11px;
             color: rgba(255,255,255,0.2);
         }
+        .device-selector {
+            margin-top: 8px;
+            display: flex;
+            gap: 10px;
+        }
+        .device-selector .btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 13px;
+        }
+        .device-selector .btn.active {
+            border: 2px solid #2ed573;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 花样续命版</p>
+        <p class="subtitle">SL278H · 吮吸款兼容版</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -178,7 +191,12 @@
             <button class="btn btn-secondary" id="connectBleBtn" style="flex:1; padding:12px;">🔵 连接蓝牙</button>
         </div>
 
-        <!-- 媒体保活按钮 -->
+        <div class="device-selector">
+            <button class="btn btn-secondary active" id="deviceBoth" style="flex:1; padding:10px;">🔀 两者都有</button>
+            <button class="btn btn-secondary" id="deviceSuck" style="flex:1; padding:10px;">💨 吮吸款</button>
+            <button class="btn btn-secondary" id="deviceVibe" style="flex:1; padding:10px;">🔴 震动棒</button>
+        </div>
+
         <div style="margin-top:8px; display:flex; gap:10px;">
             <button class="btn btn-success" id="playMediaBtn" style="flex:1; padding:12px;">🎵 播放保活媒体</button>
             <button class="btn btn-danger" id="stopMediaBtn" style="flex:1; padding:12px;">⏹ 停止</button>
@@ -213,7 +231,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 花样续命版
+        // SVAKOM SL278H 网页中继 - 吮吸款兼容版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -231,12 +249,11 @@
         let relaySecret = '';
         let isRunning = false;
 
-        // ===== 当前模式记录 =====
-        let currentMode = 'intensity'; // 'intensity' 或 'pattern'
+        let deviceType = 'both';
+        let currentMode = 'intensity';
         let currentPattern = 1;
         let currentLevel = 3;
 
-        // ===== 媒体保活 =====
         let mediaElement = null;
         let isMediaPlaying = false;
 
@@ -255,6 +272,9 @@
         const log = document.getElementById('log');
         const stopBtn = document.getElementById('stopBtn');
         const testBtn = document.getElementById('testBtn');
+        const deviceBoth = document.getElementById('deviceBoth');
+        const deviceSuck = document.getElementById('deviceSuck');
+        const deviceVibe = document.getElementById('deviceVibe');
 
         function logMessage(msg, type = '') {
             const time = new Date().toLocaleTimeString();
@@ -268,7 +288,15 @@
             statusText.textContent = text;
         }
 
-        // ===== 媒体保活 =====
+        function setDeviceType(type) {
+            deviceType = type;
+            [deviceBoth, deviceSuck, deviceVibe].forEach(btn => btn.classList.remove('active'));
+            if (type === 'both') deviceBoth.classList.add('active');
+            else if (type === 'suck') deviceSuck.classList.add('active');
+            else if (type === 'vibe') deviceVibe.classList.add('active');
+            logMessage(`🔀 设备类型: ${type === 'both' ? '两者都有' : type === 'suck' ? '吮吸款' : '震动棒'}`, 'info');
+        }
+
         function playMedia() {
             try {
                 if (mediaElement) {
@@ -326,6 +354,10 @@
         }
 
         async function sendPatternCommand(pattern, level) {
+            if (deviceType === 'both' || deviceType === 'suck') {
+                logMessage('⚠️ 当前模式不支持花样指令', 'error');
+                return false;
+            }
             if (!bleChar || !isBleConnected) {
                 logMessage('❌ 蓝牙未连接', 'error');
                 return false;
@@ -361,15 +393,21 @@
             }
         }
 
-        // ===== 续命机制（支持强度和花样） =====
         function startKeepalive() {
             stopKeepalive();
             if (!isBleConnected) return;
             if (currentMode === 'intensity' && currentIntensity === 0) return;
             
+            if (deviceType !== 'vibe' && currentMode === 'pattern') {
+                logMessage('⚠️ 当前设备不支持花样，切换为强度模式', 'error');
+                currentMode = 'intensity';
+                currentIntensity = 50;
+                intensitySlider.value = 50;
+                intensityDisplay.textContent = '50%';
+            }
+            
             isRunning = true;
             
-            // 立即发送一次
             if (currentMode === 'intensity') {
                 sendBleCommand(currentIntensity);
             } else if (currentMode === 'pattern') {
@@ -405,13 +443,22 @@
         }
 
         function setPattern(pattern, level) {
+            // 吮吸款或双设备模式：不支持花样
+            if (deviceType === 'both') {
+                logMessage('⚠️ 双设备模式不支持花样，自动转为强度 50%', 'error');
+                setIntensity(50);
+                return;
+            }
+            if (deviceType === 'suck') {
+                logMessage('⚠️ 吮吸款不支持花样指令，已忽略', 'error');
+                return;
+            }
             currentPattern = Math.min(8, Math.max(1, pattern));
             currentLevel = Math.min(5, Math.max(1, level || 3));
             currentMode = 'pattern';
             if (isBleConnected) startKeepalive();
         }
 
-        // ===== 轮询云端 =====
         async function pollCloud() {
             logMessage('🔍 pollCloud 被调用了', 'info');
             
@@ -563,11 +610,14 @@
             logMessage('🔌 蓝牙已断开', '');
         }
 
-        // ===== 事件绑定 =====
         connectRelayBtn.addEventListener('click', connectRelay);
         connectBleBtn.addEventListener('click', connectBle);
         playMediaBtn.addEventListener('click', playMedia);
         stopMediaBtn.addEventListener('click', stopMedia);
+
+        deviceBoth.addEventListener('click', () => setDeviceType('both'));
+        deviceSuck.addEventListener('click', () => setDeviceType('suck'));
+        deviceVibe.addEventListener('click', () => setDeviceType('vibe'));
 
         intensitySlider.addEventListener('input', (e) => {
             const val = parseInt(e.target.value);
@@ -599,11 +649,11 @@
             setTimeout(async () => { await sendBleCommand(0); logMessage('⏹ 测试停止', ''); }, 500);
         });
 
-        // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（花样续命版）', '');
+        setDeviceType('both');
+        logMessage('📡 SVAKOM 网页中继已加载（吮吸款兼容版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
-        logMessage('💡 点击「播放保活媒体」测试后台保活', '');
+        logMessage('💡 双设备模式不支持花样指令', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
         const savedSecret = localStorage.getItem('relaySecret');
