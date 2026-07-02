@@ -203,7 +203,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 音频保活版（MP3）
+        // SVAKOM SL278H 网页中继 - 可见音频保活版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -251,7 +251,7 @@
             statusText.textContent = text;
         }
 
-        // ===== 音频保活（使用 silent_30min.mp3） =====
+        // ===== 可见音频保活 =====
         function startAudioKeepAlive() {
             if (isAudioActive) {
                 logMessage('🔊 音频保活已运行', 'info');
@@ -261,18 +261,30 @@
                 audioElement = document.createElement('audio');
                 audioElement.loop = true;
                 audioElement.volume = 0.01;
-                audioElement.style.display = 'none';
-                // ✅ 使用你 GitHub 仓库里的 MP3 文件
+                audioElement.controls = true;
+                audioElement.style.position = 'fixed';
+                audioElement.style.bottom = '10px';
+                audioElement.style.right = '10px';
+                audioElement.style.width = '120px';
+                audioElement.style.height = '40px';
+                audioElement.style.zIndex = '9999';
+                audioElement.style.opacity = '0.3';
                 audioElement.src = 'https://raw.githubusercontent.com/yunz75583-debug/svakom-ble-ai/main/silent_30min.mp3';
                 document.body.appendChild(audioElement);
                 
-                audioElement.play().catch((e) => {
-                    logMessage(`⚠️ 音频播放被阻止: ${e.message}`, 'error');
-                });
-                
-                isAudioActive = true;
-                logMessage('🔊 音频保活已启动（MP3）', 'success');
-                logMessage('💡 锁屏或切后台时会显示播放器', 'info');
+                const playPromise = audioElement.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        logMessage('🔊 音频已开始播放', 'success');
+                        isAudioActive = true;
+                    }).catch((e) => {
+                        logMessage(`⚠️ 音频播放失败: ${e.message}`, 'error');
+                        document.addEventListener('click', function resumePlay() {
+                            audioElement.play().catch(() => {});
+                            document.removeEventListener('click', resumePlay);
+                        }, { once: true });
+                    });
+                }
             } catch (e) {
                 logMessage(`⚠️ 音频保活启动失败: ${e.message}`, 'error');
             }
@@ -548,7 +560,7 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（MP3音频保活版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（可见音频保活版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
         logMessage('💡 连接蓝牙时会自动启动音频保活', '');
 
