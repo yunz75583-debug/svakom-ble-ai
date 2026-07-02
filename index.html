@@ -158,7 +158,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 独立音频保活版</p>
+        <p class="subtitle">SL278H · 振荡器保活版</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -178,9 +178,9 @@
             <button class="btn btn-secondary" id="connectBleBtn" style="flex:1; padding:12px;">🔵 连接蓝牙</button>
         </div>
 
-        <!-- ===== 新增：独立的音频播放按钮 ===== -->
+        <!-- 手动保活按钮 -->
         <div style="margin-top:8px;">
-            <button class="btn btn-success" id="playAudioBtn" style="padding:12px;">🔊 播放音频（保活）</button>
+            <button class="btn btn-success" id="keepAliveBtn" style="padding:12px;">🔊 启动振荡器保活</button>
         </div>
 
         <div class="control-section" id="controlSection">
@@ -212,7 +212,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 独立音频保活版
+        // SVAKOM SL278H 网页中继 - 振荡器保活版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -230,9 +230,12 @@
         let relaySecret = '';
         let isRunning = false;
 
-        // ===== 音频保活 =====
-        let audioElement = null;
+        // ===== 振荡器保活 =====
+        let audioCtx = null;
+        let oscillator = null;
+        let gainNode = null;
         let isAudioActive = false;
+        let resumeInterval = null;
 
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
@@ -241,7 +244,7 @@
         const relaySecretInput = document.getElementById('relaySecret');
         const connectRelayBtn = document.getElementById('connectRelayBtn');
         const connectBleBtn = document.getElementById('connectBleBtn');
-        const playAudioBtn = document.getElementById('playAudioBtn');
+        const keepAliveBtn = document.getElementById('keepAliveBtn');
         const intensitySlider = document.getElementById('intensitySlider');
         const intensityDisplay = document.getElementById('intensityDisplay');
         const controlSection = document.getElementById('controlSection');
@@ -261,66 +264,60 @@
             statusText.textContent = text;
         }
 
-        // ===== 独立的音频播放函数（由按钮触发） =====
-        function startAudioKeepAlive() {
+        // ===== 手动启动振荡器保活 =====
+        function startOscillatorKeepAlive() {
             if (isAudioActive) {
-                logMessage('🔊 音频保活已运行', 'info');
-                playAudioBtn.textContent = '✅ 音频已播放';
+                logMessage('🔊 振荡器保活已运行', 'info');
+                keepAliveBtn.textContent = '✅ 保活已启动';
                 return;
             }
             try {
-                // 如果已存在则移除旧的
-                if (audioElement) {
-                    audioElement.remove();
-                    audioElement = null;
-                }
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 
-                audioElement = document.createElement('audio');
-                audioElement.loop = true;
-                audioElement.volume = 0.1;
-                audioElement.controls = true;
-                audioElement.style.position = 'fixed';
-                audioElement.style.bottom = '10px';
-                audioElement.style.right = '10px';
-                audioElement.style.width = '140px';
-                audioElement.style.height = '44px';
-                audioElement.style.zIndex = '9999';
-                audioElement.style.opacity = '0.5';
-                audioElement.style.borderRadius = '8px';
-                audioElement.src = 'https://raw.githubusercontent.com/yunz75583-debug/svakom-ble-ai/main/silent_30min.mp3';
-                document.body.appendChild(audioElement);
+                oscillator = audioCtx.createOscillator();
+                gainNode = audioCtx.createGain();
+                gainNode.gain.value = 0.001;
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.frequency.value = 440;
+                oscillator.start();
                 
-                const playPromise = audioElement.play();
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        logMessage('🔊 音频已开始播放', 'success');
-                        isAudioActive = true;
-                        playAudioBtn.textContent = '✅ 音频已播放';
-                    }).catch((e) => {
-                        logMessage(`⚠️ 音频播放失败: ${e.message}`, 'error');
-                        // 如果失败，移除控件
-                        if (audioElement) {
-                            audioElement.remove();
-                            audioElement = null;
-                        }
-                    });
-                }
+                resumeInterval = setInterval(() => {
+                    if (audioCtx && audioCtx.state === 'suspended') {
+                        audioCtx.resume().catch(() => {});
+                        logMessage('🔄 AudioContext 已恢复', 'info');
+                    }
+                }, 8000);
+                
+                isAudioActive = true;
+                keepAliveBtn.textContent = '✅ 保活已启动';
+                logMessage('🔊 振荡器保活已启动（完全静音）', 'success');
+                logMessage('💡 切后台或锁屏后会自动恢复', 'info');
             } catch (e) {
-                logMessage(`⚠️ 音频保活启动失败: ${e.message}`, 'error');
+                logMessage(`⚠️ 振荡器保活启动失败: ${e.message}`, 'error');
+                keepAliveBtn.textContent = '❌ 启动失败';
             }
         }
 
-        function stopAudioKeepAlive() {
-            if (audioElement) {
-                try {
-                    audioElement.pause();
-                    audioElement.remove();
-                } catch (e) {}
-                audioElement = null;
+        function stopOscillatorKeepAlive() {
+            if (resumeInterval) {
+                clearInterval(resumeInterval);
+                resumeInterval = null;
+            }
+            if (oscillator) {
+                try { oscillator.stop(); } catch (e) {}
+                oscillator = null;
+            }
+            if (gainNode) {
+                gainNode = null;
+            }
+            if (audioCtx) {
+                try { audioCtx.close(); } catch (e) {}
+                audioCtx = null;
             }
             isAudioActive = false;
-            playAudioBtn.textContent = '🔊 播放音频（保活）';
-            logMessage('🔇 音频已停止', 'info');
+            keepAliveBtn.textContent = '🔊 启动振荡器保活';
+            logMessage('🔇 振荡器保活已停止', 'info');
         }
 
         function buildCommand(intensity) {
@@ -538,16 +535,12 @@
             connectBleBtn.disabled = false;
             deviceName.textContent = '-';
             logMessage('🔌 蓝牙已断开', '');
-            // 断开蓝牙时自动停止音频
-            stopAudioKeepAlive();
         }
 
         // ===== 事件绑定 =====
         connectRelayBtn.addEventListener('click', connectRelay);
         connectBleBtn.addEventListener('click', connectBle);
-        
-        // ===== 独立的音频播放按钮 =====
-        playAudioBtn.addEventListener('click', startAudioKeepAlive);
+        keepAliveBtn.addEventListener('click', startOscillatorKeepAlive);
 
         intensitySlider.addEventListener('input', (e) => {
             const val = parseInt(e.target.value);
@@ -581,9 +574,9 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（独立音频保活版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（振荡器保活版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
-        logMessage('💡 点击「播放音频」按钮启动保活', '');
+        logMessage('💡 点击「启动振荡器保活」按钮启用保活', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
         const savedSecret = localStorage.getItem('relaySecret');
