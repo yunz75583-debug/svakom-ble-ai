@@ -154,7 +154,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 单设备稳定版</p>
+        <p class="subtitle">SL278H · 网页蓝牙中继</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -203,7 +203,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 单设备稳定版（适配糯叽叽）
+        // SVAKOM SL278H 网页中继 - 调试版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -275,7 +275,10 @@
         }
 
         async function sendBleCommand(intensity) {
-            if (!bleChar || !isBleConnected) return false;
+            if (!bleChar || !isBleConnected) {
+                logMessage('❌ 蓝牙未连接，无法发送', 'error');
+                return false;
+            }
             try {
                 const bytes = buildCommand(intensity);
                 await bleChar.writeValue(bytes);
@@ -313,49 +316,71 @@
             else if (isBleConnected) startKeepalive(value);
         }
 
-        // ===== 轮询云端（糯叽叽适配版） =====
+        // ===== 轮询云端（调试版） =====
         async function pollCloud() {
-            if (!isRelayConnected || !relayUrl || !relaySecret) return;
+            logMessage('🔍 pollCloud 被调用了', 'info');
+            
+            if (!isRelayConnected) {
+                logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
+                return;
+            }
+            if (!relayUrl) {
+                logMessage('⚠️ relayUrl 为空，跳过轮询', 'error');
+                return;
+            }
+            if (!relaySecret) {
+                logMessage('⚠️ relaySecret 为空，跳过轮询', 'error');
+                return;
+            }
+
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
+                logMessage(`🔍 轮询请求: ${url}`, 'info');
+                
                 const resp = await fetch(url);
+                logMessage(`🔍 响应状态: ${resp.status}`, 'info');
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
                         isRelayConnected = false;
                         return;
                     }
+                    logMessage(`❌ 轮询失败: HTTP ${resp.status}`, 'error');
                     return;
                 }
                 const data = await resp.json();
                 logMessage(`🔍 取到数据: ${JSON.stringify(data)}`, 'info');
 
-                if (!data.command) return;
-
-                const cmd = data.command;
-                if (cmd.action === 'intensity') {
-                    const val = cmd.value;
-                    logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
-                    setIntensity(val);
-                    document.querySelectorAll('[data-intensity]').forEach(b => {
-                        b.classList.toggle('active', parseInt(b.dataset.intensity) === val);
-                    });
-                } else if (cmd.action === 'pattern') {
-                    const pattern = cmd.pattern;
-                    const level = cmd.level || 3;
-                    logMessage(`📥 云端指令: 花样 ${pattern}，等级 ${level}`, 'info');
-                    sendPatternCommand(pattern, level);
-                } else if (cmd.action === 'stop') {
-                    logMessage('📥 云端指令: 停止', 'info');
-                    setIntensity(0);
-                    document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
+                if (data.command) {
+                    const cmd = data.command;
+                    logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
+                    
+                    if (cmd.action === 'intensity') {
+                        const val = cmd.value;
+                        logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
+                        await sendBleCommand(val);
+                    } else if (cmd.action === 'pattern') {
+                        const pattern = cmd.pattern;
+                        const level = cmd.level || 3;
+                        logMessage(`📥 云端指令: 花样 ${pattern}，等级 ${level}`, 'info');
+                        await sendPatternCommand(pattern, level);
+                    } else if (cmd.action === 'stop') {
+                        logMessage('📥 云端指令: 停止', 'info');
+                        await sendBleCommand(0);
+                    }
                 }
-            } catch (e) {}
+            } catch (e) {
+                logMessage(`❌ 轮询异常: ${e.message}`, 'error');
+            }
         }
 
         function startPolling() {
             if (pollTimer) clearInterval(pollTimer);
-            pollTimer = setInterval(pollCloud, POLL_INTERVAL_MS);
+            logMessage('🔄 准备开始轮询...', 'info');
+            pollTimer = setInterval(() => {
+                pollCloud();
+            }, POLL_INTERVAL_MS);
             logMessage('🔄 开始轮询云端 (300ms)', 'info');
         }
 
@@ -370,6 +395,8 @@
             if (!secret) { logMessage('❌ 请输入中继密码', 'error'); return; }
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
+            logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
+            
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
@@ -473,7 +500,7 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（稳定版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（调试版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
