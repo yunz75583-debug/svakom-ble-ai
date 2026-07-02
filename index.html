@@ -80,6 +80,10 @@
             color: #fff;
             border: 1px solid rgba(255,255,255,0.15);
         }
+        .btn-success {
+            background: linear-gradient(135deg, #2ed573, #1e90ff);
+            color: #fff;
+        }
         .input-group {
             margin-top: 12px;
             display: flex;
@@ -134,7 +138,7 @@
             font-size: 11px;
             font-family: "Courier New", monospace;
             color: rgba(255,255,255,0.5);
-            max-height: 120px;
+            max-height: 150px;
             overflow-y: auto;
             word-break: break-all;
             line-height: 1.8;
@@ -154,7 +158,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 网页蓝牙中继</p>
+        <p class="subtitle">SL278H · 媒体保活测试</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -172,6 +176,12 @@
         <div style="display:flex; gap:10px; margin-top:8px;">
             <button class="btn btn-secondary" id="connectRelayBtn" style="flex:1; padding:12px;">🔗 连接中继</button>
             <button class="btn btn-secondary" id="connectBleBtn" style="flex:1; padding:12px;">🔵 连接蓝牙</button>
+        </div>
+
+        <!-- 媒体播放按钮 -->
+        <div style="margin-top:8px; display:flex; gap:10px;">
+            <button class="btn btn-success" id="playMediaBtn" style="flex:1; padding:12px;">🎵 播放保活媒体</button>
+            <button class="btn btn-danger" id="stopMediaBtn" style="flex:1; padding:12px;">⏹ 停止</button>
         </div>
 
         <div class="control-section" id="controlSection">
@@ -203,7 +213,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 调试版（已修复续命）
+        // SVAKOM SL278H 网页中继 - 媒体保活测试版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -221,6 +231,10 @@
         let relaySecret = '';
         let isRunning = false;
 
+        // ===== 媒体保活 =====
+        let mediaElement = null;
+        let isMediaPlaying = false;
+
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
         const deviceName = document.getElementById('deviceName');
@@ -228,6 +242,8 @@
         const relaySecretInput = document.getElementById('relaySecret');
         const connectRelayBtn = document.getElementById('connectRelayBtn');
         const connectBleBtn = document.getElementById('connectBleBtn');
+        const playMediaBtn = document.getElementById('playMediaBtn');
+        const stopMediaBtn = document.getElementById('stopMediaBtn');
         const intensitySlider = document.getElementById('intensitySlider');
         const intensityDisplay = document.getElementById('intensityDisplay');
         const controlSection = document.getElementById('controlSection');
@@ -245,6 +261,55 @@
         function setStatus(state, text) {
             statusDot.className = 'status-dot ' + state;
             statusText.textContent = text;
+        }
+
+        // ===== 播放媒体 =====
+        function playMedia() {
+            try {
+                if (mediaElement) {
+                    mediaElement.remove();
+                    mediaElement = null;
+                }
+                
+                mediaElement = document.createElement('video');
+                mediaElement.src = 'https://img.heliar.top/file/1772516513350_30min-osbvow_2.mp4';
+                mediaElement.loop = true;
+                mediaElement.muted = false;
+                mediaElement.playsInline = true;
+                mediaElement.controls = true;
+                mediaElement.style.width = '100%';
+                mediaElement.style.maxHeight = '120px';
+                mediaElement.style.marginTop = '8px';
+                mediaElement.style.borderRadius = '8px';
+                mediaElement.style.backgroundColor = '#000';
+                document.querySelector('.container').appendChild(mediaElement);
+                
+                const playPromise = mediaElement.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        logMessage('🎵 媒体已开始播放', 'success');
+                        isMediaPlaying = true;
+                        playMediaBtn.textContent = '✅ 媒体播放中';
+                    }).catch((e) => {
+                        logMessage(`⚠️ 媒体播放失败: ${e.message}`, 'error');
+                    });
+                }
+            } catch (e) {
+                logMessage(`⚠️ 媒体启动失败: ${e.message}`, 'error');
+            }
+        }
+
+        function stopMedia() {
+            if (mediaElement) {
+                try {
+                    mediaElement.pause();
+                    mediaElement.remove();
+                } catch (e) {}
+                mediaElement = null;
+            }
+            isMediaPlaying = false;
+            playMediaBtn.textContent = '🎵 播放保活媒体';
+            logMessage('⏹ 媒体已停止', 'info');
         }
 
         function buildCommand(intensity) {
@@ -316,10 +381,10 @@
             else if (isBleConnected) startKeepalive(value);
         }
 
-        // ===== 轮询云端（调试版 - 已修复） =====
+        // ===== 轮询云端 =====
         async function pollCloud() {
             logMessage('🔍 pollCloud 被调用了', 'info');
-            
+            
             if (!isRelayConnected) {
                 logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
                 return;
@@ -336,10 +401,10 @@
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
                 logMessage(`🔍 轮询请求: ${url}`, 'info');
-                
+                
                 const resp = await fetch(url);
                 logMessage(`🔍 响应状态: ${resp.status}`, 'info');
-                
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
@@ -355,24 +420,19 @@
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
-                    
+                    
                     if (cmd.action === 'intensity') {
                         const val = cmd.value;
                         logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
-                        // ✅ 修复：使用 setIntensity 触发续命
-                        setIntensity(val);
-                        document.querySelectorAll('[data-intensity]').forEach(b => {
-                            b.classList.toggle('active', parseInt(b.dataset.intensity) === val);
-                        });
+                        await sendBleCommand(val);
                     } else if (cmd.action === 'pattern') {
                         const pattern = cmd.pattern;
                         const level = cmd.level || 3;
                         logMessage(`📥 云端指令: 花样 ${pattern}，等级 ${level}`, 'info');
-                        sendPatternCommand(pattern, level);
+                        await sendPatternCommand(pattern, level);
                     } else if (cmd.action === 'stop') {
                         logMessage('📥 云端指令: 停止', 'info');
-                        setIntensity(0);
-                        document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
+                        await sendBleCommand(0);
                     }
                 }
             } catch (e) {
@@ -401,7 +461,7 @@
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
             logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
-            
+            
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
@@ -472,6 +532,8 @@
         // ===== 事件绑定 =====
         connectRelayBtn.addEventListener('click', connectRelay);
         connectBleBtn.addEventListener('click', connectBle);
+        playMediaBtn.addEventListener('click', playMedia);
+        stopMediaBtn.addEventListener('click', stopMedia);
 
         intensitySlider.addEventListener('input', (e) => {
             const val = parseInt(e.target.value);
@@ -505,8 +567,9 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（修复续命版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（媒体保活测试版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
+        logMessage('💡 点击「播放保活媒体」测试后台保活', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
         const savedSecret = localStorage.getItem('relaySecret');
