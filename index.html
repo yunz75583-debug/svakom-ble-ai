@@ -160,7 +160,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 双设备 + 调试日志</p>
+        <p class="subtitle">SL278H · 双设备 + 调试日志全开</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -211,7 +211,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 调试日志版（修复发送逻辑）
+        // SVAKOM SL278H 网页中继 - 调试日志全开版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -286,9 +286,8 @@
             return new Uint8Array([0x55, 0x04, 0x00, 0x00, 0x01, value, 0xAA]);
         }
 
-        // ===== 向所有设备发送指令（修复版） =====
+        // ===== 向所有设备发送指令 =====
         async function sendBleCommand(intensity) {
-            // 检查是否有设备
             if (bleChars.length === 0) {
                 logMessage('❌ 没有已连接的蓝牙设备', 'error');
                 return false;
@@ -296,7 +295,6 @@
             try {
                 const bytes = buildCommand(intensity);
                 let successCount = 0;
-                // 遍历所有设备发送
                 for (let i = 0; i < bleChars.length; i++) {
                     if (bleChars[i]) {
                         try {
@@ -376,8 +374,8 @@
             currentIntensity = value;
             intensitySlider.value = value;
             intensityDisplay.textContent = value + '%';
-            if (value === 0) { 
-                stopKeepalive(); 
+            if (value === 0) { 
+                stopKeepalive(); 
                 sendBleCommand(0);
                 logMessage('⏹ 已发送停止指令', 'info');
             } else if (isBleConnected) {
@@ -385,19 +383,31 @@
             }
         }
 
-        // ===== 轮询云端（带详细调试日志） =====
+        // ===== 轮询云端（调试日志全开） =====
         async function pollCloud() {
-            if (!isRelayConnected || !relayUrl || !relaySecret) {
-                logMessage('⚠️ 中继未连接，跳过轮询', 'error');
+            // 第一行日志：确认函数被调用
+            logMessage('🔍 pollCloud 被调用', 'info');
+            
+            if (!isRelayConnected) {
+                logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
                 return;
             }
+            if (!relayUrl) {
+                logMessage('⚠️ relayUrl 为空，跳过轮询', 'error');
+                return;
+            }
+            if (!relaySecret) {
+                logMessage('⚠️ relaySecret 为空，跳过轮询', 'error');
+                return;
+            }
+
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
                 logMessage(`🔍 轮询请求: ${url}`, 'info');
-                
+                
                 const resp = await fetch(url);
                 logMessage(`🔍 响应状态: ${resp.status}`, 'info');
-                
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
@@ -413,7 +423,7 @@
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
-                    
+                    
                     if (cmd.action === 'intensity') {
                         const val = cmd.value;
                         logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
@@ -473,23 +483,23 @@
                 alert('请使用 Bluefy 浏览器打开');
                 return;
             }
-            
+            
             if (isScanning) {
                 logMessage('⏳ 正在扫描中，请稍候...', 'info');
                 return;
             }
-            
+            
             isScanning = true;
             connectBleBtn.disabled = true;
-            
+            
             try {
                 logMessage('🔍 扫描蓝牙设备...', '');
-                
+                
                 const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: [SERVICE_UUID]
                 });
-                
+                
                 const name = device.name || '';
                 if (!name.includes('SL278') && !name.includes('SVAKOM')) {
                     logMessage(`⚠️ 设备 ${name} 不匹配，跳过`, 'error');
@@ -497,7 +507,7 @@
                     connectBleBtn.disabled = false;
                     return;
                 }
-                
+                
                 const alreadyConnected = bleDevices.some(d => d && d.id === device.id);
                 if (alreadyConnected) {
                     logMessage(`⚠️ 设备 ${name} 已连接`, 'error');
@@ -505,20 +515,20 @@
                     connectBleBtn.disabled = false;
                     return;
                 }
-                
+                
                 logMessage(`✅ 找到: ${name}`, 'success');
-                
+                
                 const server = await device.gatt.connect();
                 logMessage('✅ GATT 连接成功', 'success');
-                
+                
                 const service = await server.getPrimaryService(SERVICE_UUID);
                 const char = await service.getCharacteristic(CHARACTERISTIC_UUID);
                 logMessage('✅ 蓝牙特征已获取', 'success');
-                
+                
                 bleDevices.push(device);
                 bleServers.push(server);
                 bleChars.push(char);
-                
+                
                 device.addEventListener('gattserverdisconnected', () => {
                     logMessage(`⚠️ 设备 ${name} 断开`, 'error');
                     const idx = bleDevices.indexOf(device);
@@ -529,19 +539,19 @@
                     }
                     updateDeviceCount();
                 });
-                
+                
                 updateDeviceCount();
                 logMessage(`🎉 已连接 ${bleChars.filter(c => c !== null).length} 个设备`, 'success');
-                
+                
                 await sendBleCommand(0);
-                
+                
                 logMessage('🔄 继续扫描下一个设备（取消可关闭弹窗）...', 'info');
                 setTimeout(() => {
                     isScanning = false;
                     connectBleBtn.disabled = false;
                     connectBle();
                 }, 500);
-                
+                
             } catch (e) {
                 if (e.message.includes('cancelled')) {
                     logMessage('✅ 扫描完成，停止搜索', 'success');
@@ -587,15 +597,15 @@
             }
             logMessage('🔬 测试: 发送 30%...', '');
             await sendBleCommand(30);
-            setTimeout(async () => { 
-                await sendBleCommand(0); 
-                logMessage('⏹ 测试停止', ''); 
+            setTimeout(async () => { 
+                await sendBleCommand(0); 
+                logMessage('⏹ 测试停止', ''); 
             }, 500);
         });
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（调试版 + 双设备）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（调试日志全开版）', '');
         logMessage('💡 先连接中继，再点击"连接蓝牙"', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
