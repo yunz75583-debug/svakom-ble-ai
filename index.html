@@ -275,7 +275,10 @@
         }
 
         async function sendBleCommand(intensity) {
-            if (!bleChar || !isBleConnected) return false;
+            if (!bleChar || !isBleConnected) {
+                logMessage('❌ 蓝牙未连接，无法发送', 'error');
+                return false;
+            }
             try {
                 const bytes = buildCommand(intensity);
                 await bleChar.writeValue(bytes);
@@ -313,11 +316,15 @@
             else if (isBleConnected) startKeepalive(value);
         }
 
-        // ===== 轮询云端（修复版） =====
+        // ===== 轮询云端（强制发送版） =====
         async function pollCloud() {
-            if (!isRelayConnected || !relayUrl || !relaySecret) return;
+            if (!isRelayConnected || !relayUrl || !relaySecret) {
+                logMessage('⚠️ 中继未连接，跳过轮询', 'error');
+                return;
+            }
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
+                logMessage(`🔍 轮询请求: ${url}`, 'info');
                 const resp = await fetch(url);
                 if (!resp.ok) {
                     if (resp.status === 401) {
@@ -325,32 +332,35 @@
                         isRelayConnected = false;
                         return;
                     }
+                    logMessage(`❌ 轮询失败: HTTP ${resp.status}`, 'error');
                     return;
                 }
                 const data = await resp.json();
                 logMessage(`🔍 取到数据: ${JSON.stringify(data)}`, 'info');
 
-                if (!data.command) return;
-
-                const cmd = data.command;
-                if (cmd.action === 'intensity') {
-                    const val = cmd.value;
-                    logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
-                    setIntensity(val);
-                    document.querySelectorAll('[data-intensity]').forEach(b => {
-                        b.classList.toggle('active', parseInt(b.dataset.intensity) === val);
-                    });
-                } else if (cmd.action === 'pattern') {
-                    const pattern = cmd.pattern;
-                    const level = cmd.level || 3;
-                    logMessage(`📥 云端指令: 花样 ${pattern}，等级 ${level}`, 'info');
-                    sendPatternCommand(pattern, level);
-                } else if (cmd.action === 'stop') {
-                    logMessage('📥 云端指令: 停止', 'info');
-                    setIntensity(0);
-                    document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
+                // 如果有指令，强制发送
+                if (data.command) {
+                    const cmd = data.command;
+                    logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
+                    
+                    // 强制发送蓝牙指令
+                    if (cmd.action === 'intensity') {
+                        const val = cmd.value;
+                        logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
+                        await sendBleCommand(val);
+                    } else if (cmd.action === 'pattern') {
+                        const pattern = cmd.pattern;
+                        const level = cmd.level || 3;
+                        logMessage(`📥 云端指令: 花样 ${pattern}，等级 ${level}`, 'info');
+                        await sendPatternCommand(pattern, level);
+                    } else if (cmd.action === 'stop') {
+                        logMessage('📥 云端指令: 停止', 'info');
+                        await sendBleCommand(0);
+                    }
                 }
-            } catch (e) {}
+            } catch (e) {
+                logMessage(`❌ 轮询异常: ${e.message}`, 'error');
+            }
         }
 
         function startPolling() {
