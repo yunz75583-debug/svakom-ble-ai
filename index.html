@@ -154,7 +154,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 单设备版</p>
+        <p class="subtitle">SL278H · 单设备稳定版</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -203,7 +203,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 单设备可用版
+        // SVAKOM SL278H 网页中继 - 单设备稳定版（适配糯叽叽）
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -313,7 +313,7 @@
             else if (isBleConnected) startKeepalive(value);
         }
 
-        // ===== 轮询云端 =====
+        // ===== 轮询云端（糯叽叽适配版） =====
         async function pollCloud() {
             if (!isRelayConnected || !relayUrl || !relaySecret) return;
             try {
@@ -473,7 +473,7 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（单设备版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（稳定版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
