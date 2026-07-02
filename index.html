@@ -134,7 +134,7 @@
             font-size: 11px;
             font-family: "Courier New", monospace;
             color: rgba(255,255,255,0.5);
-            max-height: 120px;
+            max-height: 150px;
             overflow-y: auto;
             word-break: break-all;
             line-height: 1.8;
@@ -160,7 +160,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 自动连接双设备</p>
+        <p class="subtitle">SL278H · 双设备 + 调试日志</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -211,7 +211,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 自动连接双设备版
+        // SVAKOM SL278H 网页中继 - 调试日志版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -219,7 +219,6 @@
         const KEEPALIVE_INTERVAL_MS = 1500;
         const POLL_INTERVAL_MS = 300;
 
-        // 多设备支持
         let bleDevices = [];
         let bleServers = [];
         let bleChars = [];
@@ -287,7 +286,6 @@
             return new Uint8Array([0x55, 0x04, 0x00, 0x00, 0x01, value, 0xAA]);
         }
 
-        // ===== 向所有设备发送指令 =====
         async function sendToAllDevices(bytes) {
             let successCount = 0;
             for (let i = 0; i < bleChars.length; i++) {
@@ -377,22 +375,31 @@
             }
         }
 
-        // ===== 轮询云端 =====
+        // ===== 轮询云端（带详细调试日志） =====
         async function pollCloud() {
-            if (!isRelayConnected || !relayUrl || !relaySecret) return;
+            if (!isRelayConnected || !relayUrl || !relaySecret) {
+                logMessage('⚠️ 中继未连接，跳过轮询', 'error');
+                return;
+            }
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
+                logMessage(`🔍 轮询请求: ${url}`, 'info');
+                
                 const resp = await fetch(url);
+                logMessage(`🔍 响应状态: ${resp.status}`, 'info');
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
                         isRelayConnected = false;
                         return;
                     }
+                    logMessage(`❌ 轮询失败: HTTP ${resp.status}`, 'error');
                     return;
                 }
                 const data = await resp.json();
-                
+                logMessage(`🔍 取到数据: ${JSON.stringify(data)}`, 'info');
+
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
@@ -411,11 +418,14 @@
                         await sendBleCommand(0);
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+                logMessage(`❌ 轮询异常: ${e.message}`, 'error');
+            }
         }
 
         function startPolling() {
             if (pollTimer) clearInterval(pollTimer);
+            logMessage('🔄 准备开始轮询...', 'info');
             pollTimer = setInterval(pollCloud, POLL_INTERVAL_MS);
             logMessage('🔄 开始轮询云端 (300ms)', 'info');
         }
@@ -478,7 +488,6 @@
                     return;
                 }
                 
-                // 检查是否已连接
                 const alreadyConnected = bleDevices.some(d => d && d.id === device.id);
                 if (alreadyConnected) {
                     logMessage(`⚠️ 设备 ${name} 已连接`, 'error');
@@ -514,10 +523,8 @@
                 updateDeviceCount();
                 logMessage(`🎉 已连接 ${bleChars.filter(c => c !== null).length} 个设备`, 'success');
                 
-                // 发送停止指令
                 await sendBleCommand(0);
                 
-                // 自动扫描下一个设备
                 logMessage('🔄 继续扫描下一个设备（取消可关闭弹窗）...', 'info');
                 setTimeout(() => {
                     isScanning = false;
@@ -579,9 +586,8 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（自动连接双设备版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（调试版 + 双设备）', '');
         logMessage('💡 先连接中继，再点击"连接蓝牙"', '');
-        logMessage('💡 点击一次会自动连接所有匹配的设备', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
         const savedSecret = localStorage.getItem('relaySecret');
