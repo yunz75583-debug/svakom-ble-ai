@@ -149,12 +149,18 @@
             font-size: 11px;
             color: rgba(255,255,255,0.2);
         }
+        .device-count {
+            font-size: 12px;
+            color: rgba(255,255,255,0.5);
+            text-align: center;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 网页蓝牙中继</p>
+        <p class="subtitle">SL278H · 双设备连接</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -173,6 +179,8 @@
             <button class="btn btn-secondary" id="connectRelayBtn" style="flex:1; padding:12px;">🔗 连接中继</button>
             <button class="btn btn-secondary" id="connectBleBtn" style="flex:1; padding:12px;">🔵 连接蓝牙</button>
         </div>
+
+        <div class="device-count" id="deviceCount">已连接设备: 0</div>
 
         <div class="control-section" id="controlSection">
             <div style="margin-top:20px;">
@@ -203,7 +211,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 调试版
+        // SVAKOM SL278H 网页中继 - 双设备连接版
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -211,7 +219,11 @@
         const KEEPALIVE_INTERVAL_MS = 1500;
         const POLL_INTERVAL_MS = 300;
 
-        let bleDevice = null, bleServer = null, bleChar = null;
+        // 多设备支持
+        let bleDevices = [];
+        let bleServers = [];
+        let bleChars = [];
+
         let isBleConnected = false;
         let isRelayConnected = false;
         let currentIntensity = 0;
@@ -224,6 +236,7 @@
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
         const deviceName = document.getElementById('deviceName');
+        const deviceCount = document.getElementById('deviceCount');
         const relayUrlInput = document.getElementById('relayUrl');
         const relaySecretInput = document.getElementById('relaySecret');
         const connectRelayBtn = document.getElementById('connectRelayBtn');
@@ -247,6 +260,22 @@
             statusText.textContent = text;
         }
 
+        function updateDeviceCount() {
+            const count = bleChars.filter(c => c !== null).length;
+            deviceCount.textContent = `已连接设备: ${count}`;
+            if (count > 0) {
+                deviceName.textContent = `${count} 个设备`;
+                setStatus('connected', '蓝牙已连接');
+                controlSection.classList.add('active');
+                connectBleBtn.textContent = '✅ 蓝牙已连接';
+            } else {
+                deviceName.textContent = '-';
+                setStatus('disconnected', '未连接');
+                controlSection.classList.remove('active');
+                connectBleBtn.textContent = '🔵 连接蓝牙';
+            }
+        }
+
         function buildCommand(intensity) {
             const value = Math.round((intensity / 100) * 255);
             if (intensity === 0 || value === 0) {
@@ -255,38 +284,61 @@
             return new Uint8Array([0x55, 0x04, 0x00, 0x00, 0x01, value, 0xAA]);
         }
 
+        // ===== 向所有设备发送指令 =====
+        async function sendToAllDevices(bytes) {
+            let successCount = 0;
+            for (let i = 0; i < bleChars.length; i++) {
+                if (bleChars[i]) {
+                    try {
+                        await bleChars[i].writeValue(bytes);
+                        successCount++;
+                    } catch (e) {
+                        logMessage(`❌ 发送到设备 ${i+1} 失败: ${e.message}`, 'error');
+                        // 标记该设备已断开
+                        bleChars[i] = null;
+                    }
+                }
+            }
+            updateDeviceCount();
+            return successCount;
+        }
+
+        async function sendBleCommand(intensity) {
+            if (bleChars.length === 0 || bleChars.every(c => c === null)) {
+                logMessage('❌ 没有已连接的蓝牙设备', 'error');
+                return false;
+            }
+            try {
+                const bytes = buildCommand(intensity);
+                const count = await sendToAllDevices(bytes);
+                const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+                if (count > 0) {
+                    logMessage(`📤 强度: ${hex} (${intensity}%) → ${count} 个设备`, 'highlight');
+                }
+                return count > 0;
+            } catch (e) {
+                logMessage(`❌ 发送失败: ${e.message}`, 'error');
+                return false;
+            }
+        }
+
         async function sendPatternCommand(pattern, level) {
-            if (!bleChar || !isBleConnected) {
-                logMessage('❌ 蓝牙未连接', 'error');
+            if (bleChars.length === 0 || bleChars.every(c => c === null)) {
+                logMessage('❌ 没有已连接的蓝牙设备', 'error');
                 return false;
             }
             const mode = Math.min(8, Math.max(1, pattern));
             const lv = Math.min(5, Math.max(1, level || 3));
             const bytes = new Uint8Array([0x55, 0x03, 0x00, 0x00, mode, lv, 0x00]);
             try {
-                await bleChar.writeValue(bytes);
+                const count = await sendToAllDevices(bytes);
                 const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
-                logMessage(`📤 花样: ${hex} (花样 ${mode}, 等级 ${lv})`, 'highlight');
-                return true;
+                if (count > 0) {
+                    logMessage(`📤 花样: ${hex} (花样 ${mode}, 等级 ${lv}) → ${count} 个设备`, 'highlight');
+                }
+                return count > 0;
             } catch (e) {
                 logMessage(`❌ 花样发送失败: ${e.message}`, 'error');
-                return false;
-            }
-        }
-
-        async function sendBleCommand(intensity) {
-            if (!bleChar || !isBleConnected) {
-                logMessage('❌ 蓝牙未连接，无法发送', 'error');
-                return false;
-            }
-            try {
-                const bytes = buildCommand(intensity);
-                await bleChar.writeValue(bytes);
-                const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
-                logMessage(`📤 强度: ${hex} (${intensity}%)`, 'highlight');
-                return true;
-            } catch (e) {
-                logMessage(`❌ 发送失败: ${e.message}`, 'error');
                 return false;
             }
         }
@@ -312,46 +364,31 @@
             currentIntensity = value;
             intensitySlider.value = value;
             intensityDisplay.textContent = value + '%';
-            if (value === 0) { stopKeepalive(); sendBleCommand(0); }
-            else if (isBleConnected) startKeepalive(value);
+            if (value === 0) { 
+                stopKeepalive(); 
+                sendBleCommand(0);
+                logMessage('⏹ 已发送停止指令', 'info');
+            } else if (isBleConnected) {
+                startKeepalive(value);
+            }
         }
 
-        // ===== 轮询云端（调试版） =====
+        // ===== 轮询云端 =====
         async function pollCloud() {
-            logMessage('🔍 pollCloud 被调用了', 'info');
-            
-            if (!isRelayConnected) {
-                logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
-                return;
-            }
-            if (!relayUrl) {
-                logMessage('⚠️ relayUrl 为空，跳过轮询', 'error');
-                return;
-            }
-            if (!relaySecret) {
-                logMessage('⚠️ relaySecret 为空，跳过轮询', 'error');
-                return;
-            }
-
+            if (!isRelayConnected || !relayUrl || !relaySecret) return;
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
-                logMessage(`🔍 轮询请求: ${url}`, 'info');
-                
                 const resp = await fetch(url);
-                logMessage(`🔍 响应状态: ${resp.status}`, 'info');
-                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
                         isRelayConnected = false;
                         return;
                     }
-                    logMessage(`❌ 轮询失败: HTTP ${resp.status}`, 'error');
                     return;
                 }
                 const data = await resp.json();
-                logMessage(`🔍 取到数据: ${JSON.stringify(data)}`, 'info');
-
+                
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
@@ -370,17 +407,12 @@
                         await sendBleCommand(0);
                     }
                 }
-            } catch (e) {
-                logMessage(`❌ 轮询异常: ${e.message}`, 'error');
-            }
+            } catch (e) {}
         }
 
         function startPolling() {
             if (pollTimer) clearInterval(pollTimer);
-            logMessage('🔄 准备开始轮询...', 'info');
-            pollTimer = setInterval(() => {
-                pollCloud();
-            }, POLL_INTERVAL_MS);
+            pollTimer = setInterval(pollCloud, POLL_INTERVAL_MS);
             logMessage('🔄 开始轮询云端 (300ms)', 'info');
         }
 
@@ -395,8 +427,6 @@
             if (!secret) { logMessage('❌ 请输入中继密码', 'error'); return; }
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
-            logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
-            
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
@@ -412,6 +442,7 @@
             }
         }
 
+        // ===== 连接蓝牙（支持多设备） =====
         async function connectBle() {
             if (!navigator.bluetooth) {
                 logMessage('❌ 请使用 Bluefy 浏览器打开', 'error');
@@ -419,49 +450,45 @@
                 return;
             }
             try {
-                setStatus('connecting', '扫描中...');
-                connectBleBtn.disabled = true;
                 logMessage('🔍 扫描蓝牙设备...', '');
-                bleDevice = await navigator.bluetooth.requestDevice({
+                const device = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: [SERVICE_UUID]
                 });
-                logMessage(`✅ 找到: ${bleDevice.name || '未知'}`, 'success');
-                deviceName.textContent = bleDevice.name || '未知';
-                bleServer = await bleDevice.gatt.connect();
+                logMessage(`✅ 找到: ${device.name || '未知'}`, 'success');
+
+                const server = await device.gatt.connect();
                 logMessage('✅ GATT 连接成功', 'success');
-                const service = await bleServer.getPrimaryService(SERVICE_UUID);
-                bleChar = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                const char = await service.getCharacteristic(CHARACTERISTIC_UUID);
                 logMessage('✅ 蓝牙特征已获取', 'success');
-                isBleConnected = true;
-                setStatus('connected', '蓝牙已连接');
-                controlSection.classList.add('active');
-                connectBleBtn.textContent = '✅ 蓝牙已连接';
-                logMessage('🎉 蓝牙就绪！等待云端指令...', 'success');
-                bleDevice.addEventListener('gattserverdisconnected', () => {
-                    logMessage('⚠️ 蓝牙断开', 'error');
-                    disconnectBle();
+
+                // 存储到数组中
+                bleDevices.push(device);
+                bleServers.push(server);
+                bleChars.push(char);
+
+                device.addEventListener('gattserverdisconnected', () => {
+                    logMessage(`⚠️ 设备 ${device.name || '未知'} 断开`, 'error');
+                    const idx = bleDevices.indexOf(device);
+                    if (idx !== -1) {
+                        bleDevices[idx] = null;
+                        bleServers[idx] = null;
+                        bleChars[idx] = null;
+                    }
+                    updateDeviceCount();
                 });
+
+                updateDeviceCount();
+                logMessage(`🎉 已连接 ${bleChars.filter(c => c !== null).length} 个设备`, 'success');
+
+                // 连接后发送停止指令
                 await sendBleCommand(0);
+
             } catch (e) {
                 logMessage(`❌ 蓝牙连接失败: ${e.message}`, 'error');
-                setStatus('disconnected', '连接失败');
-                connectBleBtn.disabled = false;
             }
-        }
-
-        function disconnectBle() {
-            stopKeepalive();
-            isBleConnected = false;
-            bleChar = null;
-            if (bleServer) { try { bleServer.disconnect(); } catch (e) {} bleServer = null; }
-            bleDevice = null;
-            setStatus('disconnected', '未连接');
-            controlSection.classList.remove('active');
-            connectBleBtn.textContent = '🔵 连接蓝牙';
-            connectBleBtn.disabled = false;
-            deviceName.textContent = '-';
-            logMessage('🔌 蓝牙已断开', '');
         }
 
         // ===== 事件绑定 =====
@@ -492,16 +519,23 @@
         });
 
         testBtn.addEventListener('click', async () => {
-            if (!isBleConnected) { logMessage('❌ 请先连接蓝牙', 'error'); return; }
+            if (bleChars.length === 0 || bleChars.every(c => c === null)) {
+                logMessage('❌ 请先连接蓝牙', 'error');
+                return;
+            }
             logMessage('🔬 测试: 发送 30%...', '');
             await sendBleCommand(30);
-            setTimeout(async () => { await sendBleCommand(0); logMessage('⏹ 测试停止', ''); }, 500);
+            setTimeout(async () => { 
+                await sendBleCommand(0); 
+                logMessage('⏹ 测试停止', ''); 
+            }, 500);
         });
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（调试版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（双设备版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
+        logMessage('💡 点击"连接蓝牙"可多次添加设备', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
         const savedSecret = localStorage.getItem('relaySecret');
