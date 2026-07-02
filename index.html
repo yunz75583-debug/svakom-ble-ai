@@ -275,7 +275,7 @@
                     mediaElement.remove();
                     mediaElement = null;
                 }
-                
+                
                 mediaElement = document.createElement('video');
                 mediaElement.src = 'https://img.heliar.top/file/1772516513350_30min-osbvow_2.mp4';
                 mediaElement.loop = true;
@@ -288,7 +288,7 @@
                 mediaElement.style.borderRadius = '8px';
                 mediaElement.style.backgroundColor = '#000';
                 document.querySelector('.container').appendChild(mediaElement);
-                
+                
                 const playPromise = mediaElement.play();
                 if (playPromise !== undefined) {
                     playPromise.then(() => {
@@ -366,16 +366,16 @@
             stopKeepalive();
             if (!isBleConnected) return;
             if (currentMode === 'intensity' && currentIntensity === 0) return;
-            
+            
             isRunning = true;
-            
+            
             // 立即发送一次
             if (currentMode === 'intensity') {
                 sendBleCommand(currentIntensity);
             } else if (currentMode === 'pattern') {
                 sendPatternCommand(currentPattern, currentLevel);
             }
-            
+            
             keepaliveTimer = setInterval(() => {
                 if (isBleConnected && isRunning) {
                     if (currentMode === 'intensity') {
@@ -414,7 +414,7 @@
         // ===== 轮询云端 =====
         async function pollCloud() {
             logMessage('🔍 pollCloud 被调用了', 'info');
-            
+            
             if (!isRelayConnected) {
                 logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
                 return;
@@ -431,10 +431,10 @@
             try {
                 const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
                 logMessage(`🔍 轮询请求: ${url}`, 'info');
-                
+                
                 const resp = await fetch(url);
                 logMessage(`🔍 响应状态: ${resp.status}`, 'info');
-                
+                
                 if (!resp.ok) {
                     if (resp.status === 401) {
                         logMessage('❌ 中继密码错误', 'error');
@@ -450,7 +450,7 @@
                 if (data.command) {
                     const cmd = data.command;
                     logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
-                    
+                    
                     if (cmd.action === 'intensity') {
                         const val = cmd.value;
                         logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
@@ -495,7 +495,7 @@
             relayUrl = url.startsWith('http') ? url : 'https://' + url;
             relaySecret = secret;
             logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
-            
+            
             try {
                 logMessage('🔗 测试中继连接...', '');
                 const resp = await fetch(`${relayUrl}/status`);
