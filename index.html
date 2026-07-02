@@ -203,7 +203,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 调试版
+        // SVAKOM SL278H 网页中继 - 调试版（已修复续命）
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -316,7 +316,7 @@
             else if (isBleConnected) startKeepalive(value);
         }
 
-        // ===== 轮询云端（调试版） =====
+        // ===== 轮询云端（调试版 - 已修复） =====
         async function pollCloud() {
             logMessage('🔍 pollCloud 被调用了', 'info');
             
@@ -359,15 +359,20 @@
                     if (cmd.action === 'intensity') {
                         const val = cmd.value;
                         logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
-                        await sendBleCommand(val);
+                        // ✅ 修复：使用 setIntensity 触发续命
+                        setIntensity(val);
+                        document.querySelectorAll('[data-intensity]').forEach(b => {
+                            b.classList.toggle('active', parseInt(b.dataset.intensity) === val);
+                        });
                     } else if (cmd.action === 'pattern') {
                         const pattern = cmd.pattern;
                         const level = cmd.level || 3;
                         logMessage(`📥 云端指令: 花样 ${pattern}，等级 ${level}`, 'info');
-                        await sendPatternCommand(pattern, level);
+                        sendPatternCommand(pattern, level);
                     } else if (cmd.action === 'stop') {
                         logMessage('📥 云端指令: 停止', 'info');
-                        await sendBleCommand(0);
+                        setIntensity(0);
+                        document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
                     }
                 }
             } catch (e) {
@@ -500,7 +505,7 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（调试版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（修复续命版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
