@@ -154,7 +154,7 @@
 <body>
     <div class="container">
         <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 网页蓝牙中继</p>
+        <p class="subtitle">SL278H · 音频保活版</p>
 
         <div class="status-bar">
             <span class="status-text">
@@ -203,7 +203,7 @@
 
     <script>
         // ============================================================
-        // SVAKOM SL278H 网页中继 - 调试版
+        // SVAKOM SL278H 网页中继 - 音频保活版（基于调试版）
         // ============================================================
 
         const SERVICE_UUID = "FFE0";
@@ -220,6 +220,11 @@
         let relayUrl = '';
         let relaySecret = '';
         let isRunning = false;
+
+        // ===== 音频保活相关 =====
+        let audioCtx = null;
+        let audioInterval = null;
+        let isAudioActive = false;
 
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
@@ -245,6 +250,47 @@
         function setStatus(state, text) {
             statusDot.className = 'status-dot ' + state;
             statusText.textContent = text;
+        }
+
+        // ===== 无声音频保活 =====
+        function startAudioKeepAlive() {
+            if (isAudioActive) {
+                logMessage('🔊 音频保活已运行', 'info');
+                return;
+            }
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                gainNode.gain.value = 0.001;
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.start();
+                
+                audioInterval = setInterval(() => {
+                    if (audioCtx && audioCtx.state === 'suspended') {
+                        audioCtx.resume().catch(() => {});
+                    }
+                }, 10000);
+                
+                isAudioActive = true;
+                logMessage('🔊 无声音频保活已启动', 'success');
+            } catch (e) {
+                logMessage(`⚠️ 音频保活启动失败: ${e.message}`, 'error');
+            }
+        }
+
+        function stopAudioKeepAlive() {
+            if (audioInterval) {
+                clearInterval(audioInterval);
+                audioInterval = null;
+            }
+            if (audioCtx) {
+                try { audioCtx.close(); } catch (e) {}
+                audioCtx = null;
+            }
+            isAudioActive = false;
+            logMessage('🔇 音频保活已停止', 'info');
         }
 
         function buildCommand(intensity) {
@@ -419,6 +465,9 @@
                 return;
             }
             try {
+                // ===== 启动音频保活 =====
+                startAudioKeepAlive();
+
                 setStatus('connecting', '扫描中...');
                 connectBleBtn.disabled = true;
                 logMessage('🔍 扫描蓝牙设备...', '');
@@ -438,6 +487,7 @@
                 controlSection.classList.add('active');
                 connectBleBtn.textContent = '✅ 蓝牙已连接';
                 logMessage('🎉 蓝牙就绪！等待云端指令...', 'success');
+                logMessage('🔊 音频保活已激活，切后台试试', 'info');
                 bleDevice.addEventListener('gattserverdisconnected', () => {
                     logMessage('⚠️ 蓝牙断开', 'error');
                     disconnectBle();
@@ -462,6 +512,8 @@
             connectBleBtn.disabled = false;
             deviceName.textContent = '-';
             logMessage('🔌 蓝牙已断开', '');
+            // 可选：断开时停止音频保活
+            // stopAudioKeepAlive();
         }
 
         // ===== 事件绑定 =====
@@ -500,8 +552,9 @@
 
         // ===== 启动 =====
         setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（调试版）', '');
+        logMessage('📡 SVAKOM 网页中继已加载（音频保活版）', '');
         logMessage('💡 先连接中继，再连接蓝牙', '');
+        logMessage('💡 连接蓝牙时会自动启动音频保活', '');
 
         const savedUrl = localStorage.getItem('relayUrl');
         const savedSecret = localStorage.getItem('relaySecret');
