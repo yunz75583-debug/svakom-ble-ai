@@ -206,6 +206,7 @@
     let lastVib = 0, lastExt = 0;
     let keepaliveTimer = null, pollTimer = null;
     let audioEl = null;
+    let isTesting = false;  // 测试状态锁
 
     const logEl = document.getElementById('log');
     const dotRelay = document.getElementById('dotRelay');
@@ -238,7 +239,6 @@
     // ===== 发送 =====
     async function sendBoth(vibPct, extPct) {
         if (!bleChar || !isBleConnected) {
-            log('❌ 蓝牙未连接', 'err');
             return false;
         }
         try {
@@ -269,6 +269,7 @@
     // ===== 续命 =====
     function startKeepalive() {
         stopKeepalive();
+        if (isTesting) return;  // 测试期间不启动续命
         keepaliveTimer = setInterval(() => {
             if (bleChar && isBleConnected && (lastVib > 0 || lastExt > 0)) {
                 const cmds = buildCommands(lastVib, lastExt);
@@ -304,13 +305,13 @@
                     document.getElementById('vibSlider').value = v;
                     document.getElementById('vibDisplay').textContent = v + '%';
                     vibVal = v;
-                    sendBoth(v, extVal);
+                    if (!isTesting) sendBoth(v, extVal);
                 } else if (cmd.action === 'extension') {
                     const e = Math.min(100, Math.max(0, cmd.value));
                     document.getElementById('extSlider').value = e;
                     document.getElementById('extDisplay').textContent = e + '%';
                     extVal = e;
-                    sendBoth(vibVal, e);
+                    if (!isTesting) sendBoth(vibVal, e);
                 } else if (cmd.action === 'stop') {
                     stopBoth();
                 }
@@ -429,25 +430,30 @@
         const val = parseInt(vibSlider.value);
         vibDisplay.textContent = val + '%';
         vibVal = val;
-        sendBoth(vibVal, parseInt(extSlider.value));
+        if (!isTesting) sendBoth(vibVal, parseInt(extSlider.value));
     });
 
     extSlider.addEventListener('input', () => {
         const val = parseInt(extSlider.value);
         extDisplay.textContent = val + '%';
         extVal = val;
-        sendBoth(parseInt(vibSlider.value), extVal);
+        if (!isTesting) sendBoth(parseInt(vibSlider.value), extVal);
     });
 
     document.getElementById('stopBtn').addEventListener('click', stopBoth);
 
-    // 测试：暂停续命，避免卡顿
+    // 测试：暂停续命，状态锁
     document.getElementById('testBtn').addEventListener('click', async () => {
-        log('🔬 测试: 震动 50% + 伸缩 30%', 'warn');
+        if (isTesting) return;
+        isTesting = true;
         stopKeepalive();
+        log('🔬 测试: 震动 50% + 伸缩 30%', 'warn');
+
         await sendBoth(50, 30);
+
         setTimeout(async () => {
             await stopBoth();
+            isTesting = false;
             startKeepalive();
             log('✅ 测试完成，续命已恢复', 'ok');
         }, 2000);
