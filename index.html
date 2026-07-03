@@ -190,7 +190,7 @@
 
 <script>
     // ============================================================
-    // SVAKOM SL278K 中继 — 双通道控制（优化版）
+    // SVAKOM SL278K 中继 — 双通道控制（伸缩指令修正版）
     // ============================================================
 
     const SERVICE_UUID = "FFE0";
@@ -206,7 +206,6 @@
     let lastVib = 0, lastExt = 0;
     let keepaliveTimer = null, pollTimer = null;
     let audioEl = null;
-    let isTesting = false;  // 测试状态锁
 
     const logEl = document.getElementById('log');
     const dotRelay = document.getElementById('dotRelay');
@@ -227,12 +226,16 @@
 
     // ===== 指令构建 =====
     function buildCommands(vibPct, extPct) {
-        const v = Math.min(7, Math.max(0, Math.round(vibPct / 100 * 7)));
-        const e = Math.min(10, Math.max(0, Math.round(extPct / 100 * 10)));
+        // 伸缩：0-100 → 1-7（0 为停止）
+        const e = Math.min(7, Math.max(0, Math.round(extPct / 100 * 7)));
+        // 震动：0-100 → 1-10（0 为停止）
+        const v = Math.min(10, Math.max(0, Math.round(vibPct / 100 * 10)));
         return {
-            vib: new Uint8Array([0x55, 0x08, 0x00, 0x00, v, 0x00, 0x00]),
-            ext: new Uint8Array([0x55, 0x03, 0x00, 0x00, e, 0x05, 0x00]),
-            v, e
+            // 伸缩指令：55 08 00 00 {强度} 00 00
+            ext: new Uint8Array([0x55, 0x08, 0x00, 0x00, e, 0x00, 0x00]),
+            // 震动指令：55 03 00 00 {强度} 05 00
+            vib: new Uint8Array([0x55, 0x03, 0x00, 0x00, v, 0x05, 0x00]),
+            e, v
         };
     }
 
@@ -243,11 +246,14 @@
         }
         try {
             const cmds = buildCommands(vibPct, extPct);
-            await bleChar.writeValue(cmds.vib);
+            // 先发伸缩
             await bleChar.writeValue(cmds.ext);
+            await new Promise(r => setTimeout(r, 50));
+            // 再发震动
+            await bleChar.writeValue(cmds.vib);
             lastVib = vibPct;
             lastExt = extPct;
-            log(`📤 震动 ${cmds.v} · 伸缩 ${cmds.e}`, 'ok');
+            log(`📤 伸缩 ${cmds.e} · 震动 ${cmds.v}`, 'ok');
             return true;
         } catch (e) {
             log(`❌ 发送失败: ${e.message}`, 'err');
@@ -269,12 +275,11 @@
     // ===== 续命 =====
     function startKeepalive() {
         stopKeepalive();
-        if (isTesting) return;  // 测试期间不启动续命
         keepaliveTimer = setInterval(() => {
             if (bleChar && isBleConnected && (lastVib > 0 || lastExt > 0)) {
                 const cmds = buildCommands(lastVib, lastExt);
-                bleChar.writeValue(cmds.vib).catch(() => {});
                 bleChar.writeValue(cmds.ext).catch(() => {});
+                bleChar.writeValue(cmds.vib).catch(() => {});
             }
         }, KEEPALIVE_MS);
     }
@@ -305,13 +310,13 @@
                     document.getElementById('vibSlider').value = v;
                     document.getElementById('vibDisplay').textContent = v + '%';
                     vibVal = v;
-                    if (!isTesting) sendBoth(v, extVal);
+                    sendBoth(v, extVal);
                 } else if (cmd.action === 'extension') {
                     const e = Math.min(100, Math.max(0, cmd.value));
                     document.getElementById('extSlider').value = e;
                     document.getElementById('extDisplay').textContent = e + '%';
                     extVal = e;
-                    if (!isTesting) sendBoth(vibVal, e);
+                    sendBoth(vibVal, e);
                 } else if (cmd.action === 'stop') {
                     stopBoth();
                 }
@@ -430,33 +435,25 @@
         const val = parseInt(vibSlider.value);
         vibDisplay.textContent = val + '%';
         vibVal = val;
-        if (!isTesting) sendBoth(vibVal, parseInt(extSlider.value));
+        sendBoth(vibVal, parseInt(extSlider.value));
     });
 
     extSlider.addEventListener('input', () => {
         const val = parseInt(extSlider.value);
         extDisplay.textContent = val + '%';
         extVal = val;
-        if (!isTesting) sendBoth(parseInt(vibSlider.value), extVal);
+        sendBoth(parseInt(vibSlider.value), extVal);
     });
 
     document.getElementById('stopBtn').addEventListener('click', stopBoth);
 
-    // 测试：暂停续命，状态锁
     document.getElementById('testBtn').addEventListener('click', async () => {
-        if (isTesting) return;
-        isTesting = true;
-        stopKeepalive();
         log('🔬 测试: 震动 50% + 伸缩 30%', 'warn');
-
         await sendBoth(50, 30);
-
         setTimeout(async () => {
             await stopBoth();
-            isTesting = false;
-            startKeepalive();
-            log('✅ 测试完成，续命已恢复', 'ok');
-        }, 2000);
+            log('✅ 测试完成', 'ok');
+        }, 3000);
     });
 
     // ===== 保存配置 =====
