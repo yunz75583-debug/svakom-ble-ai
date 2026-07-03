@@ -18,47 +18,42 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// ===== 接收指令（兼容 HTTP 调用） =====
+// ===== 接收指令（HTTP / MCP 调用） =====
 app.post('/toy', (req, res) => {
-  const { secret, action, value, pattern, level } = req.body;
-  if (secret !== toyQueue.secret) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  
-  try {
-    if (action === 'intensity') {
-      toyQueue.command = { action: 'intensity', value: value, received: Date.now() };
-    } else if (action === 'pattern') {
-      toyQueue.command = { action: 'pattern', pattern: pattern, level: level || 3, received: Date.now() };
-    } else if (action === 'stop') {
-      toyQueue.command = { action: 'stop', received: Date.now() };
-    } else {
-      return res.status(400).json({ error: '未知 action' });
-    }
+  const { secret, action, value } = req.body;
+
+  // 密码验证已注释（糯叽叽不需要密码）
+  // if (secret !== toyQueue.secret) {
+  //   return res.status(401).json({ error: 'Unauthorized' });
+  // }
+
+  // 支持三种 action：vibration / extension / stop
+  if (action === 'vibration' || action === 'extension' || action === 'stop') {
+    toyQueue.command = { action, value: value || 0, received: Date.now() };
     toyQueue.timestamp = Date.now();
-    console.log(`📥 收到指令: ${action}`, req.body);
-    res.json({ status: 'ok' });
-  } catch (e) {
-    console.error('处理指令出错:', e);
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.log(`📥 收到指令: ${action} = ${value}`);
+    res.json({ status: 'ok', command: toyQueue.command });
+  } else {
+    res.status(400).json({ error: '未知 action，支持: vibration / extension / stop' });
   }
 });
 
-// ===== 网页轮询 =====
+// ===== 网页中继轮询 =====
 app.get('/toy-next', (req, res) => {
   const { secret } = req.query;
+
   if (secret !== toyQueue.secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  
+
   const age = Date.now() - toyQueue.timestamp;
   if (age > 5000) {
     return res.json({ command: null });
   }
-  
+
   const cmd = toyQueue.command;
   toyQueue.command = null;
-  console.log(`📤 中继取走指令:`, cmd);
+  console.log(`📤 中继取走: ${cmd?.action} = ${cmd?.value}`);
   res.json({ command: cmd });
 });
 
@@ -72,10 +67,11 @@ app.get('/status', (req, res) => {
 
 // ===== 糯叽叽 MCP 入口 =====
 app.post('/', (req, res) => {
-  console.log('📥 糯叽叽请求:', JSON.stringify(req.body, null, 2));
+  console.log('📥 MCP 请求:', JSON.stringify(req.body, null, 2));
 
   const { jsonrpc, id, method, params } = req.body;
 
+  // initialize
   if (method === 'initialize') {
     return res.json({
       jsonrpc: '2.0',
@@ -88,6 +84,7 @@ app.post('/', (req, res) => {
     });
   }
 
+  // tools/list
   if (method === 'tools/list') {
     return res.json({
       jsonrpc: '2.0',
@@ -95,8 +92,8 @@ app.post('/', (req, res) => {
       result: {
         tools: [
           {
-            name: 'toy_set_speed',
-            description: '设置玩具强度 (0-100)',
+            name: 'toy_set_vibration',
+            description: '设置震动强度 (0-100)',
             inputSchema: {
               type: 'object',
               properties: {
@@ -106,20 +103,19 @@ app.post('/', (req, res) => {
             }
           },
           {
-            name: 'toy_set_pattern',
-            description: '设置振动花样 (1-8)',
+            name: 'toy_set_extension',
+            description: '设置伸缩强度 (0-100)',
             inputSchema: {
               type: 'object',
               properties: {
-                pattern: { type: 'number', minimum: 1, maximum: 8 },
-                level: { type: 'number', minimum: 1, maximum: 5 }
+                value: { type: 'number', minimum: 0, maximum: 100 }
               },
-              required: ['pattern']
+              required: ['value']
             }
           },
           {
             name: 'toy_stop',
-            description: '停止玩具',
+            description: '停止所有动作',
             inputSchema: {
               type: 'object',
               properties: {}
@@ -130,47 +126,42 @@ app.post('/', (req, res) => {
     });
   }
 
+  // tools/call
   if (method === 'tools/call') {
     try {
-      const toolName = params?.name?.toLowerCase();
+      const toolName = params?.name;
       const args = params?.arguments || {};
 
-      console.log(`🔍 收到工具调用: ${toolName}`, args);
-
-      if (toolName === 'toy_set_speed') {
+      if (toolName === 'toy_set_vibration') {
         const val = typeof args.value === 'number' ? args.value : 0;
-        // ✅ 强制写入队列
-        toyQueue.command = { action: 'intensity', value: val, received: Date.now() };
+        toyQueue.command = { action: 'vibration', value: val, received: Date.now() };
         toyQueue.timestamp = Date.now();
-        console.log(`📥 存入队列: 强度 ${val}%`);
+        console.log(`📥 存入队列: 震动 ${val}%`);
         return res.json({
           jsonrpc: '2.0',
           id: id,
           result: {
-            content: [{ type: 'text', text: `✅ 已设置强度为 ${val}%` }]
+            content: [{ type: 'text', text: `✅ 震动强度设为 ${val}%` }]
           }
         });
       }
 
-      if (toolName === 'toy_set_pattern') {
-        const pattern = typeof args.pattern === 'number' ? args.pattern : 1;
-        const level = typeof args.level === 'number' ? args.level : 3;
-        // ✅ 强制写入队列
-        toyQueue.command = { action: 'pattern', pattern: pattern, level: level, received: Date.now() };
+      if (toolName === 'toy_set_extension') {
+        const val = typeof args.value === 'number' ? args.value : 0;
+        toyQueue.command = { action: 'extension', value: val, received: Date.now() };
         toyQueue.timestamp = Date.now();
-        console.log(`📥 存入队列: 花样 ${pattern}，等级 ${level}`);
+        console.log(`📥 存入队列: 伸缩 ${val}%`);
         return res.json({
           jsonrpc: '2.0',
           id: id,
           result: {
-            content: [{ type: 'text', text: `✅ 已设置花样 ${pattern}，等级 ${level}` }]
+            content: [{ type: 'text', text: `✅ 伸缩强度设为 ${val}%` }]
           }
         });
       }
 
       if (toolName === 'toy_stop') {
-        // ✅ 强制写入队列
-        toyQueue.command = { action: 'stop', received: Date.now() };
+        toyQueue.command = { action: 'stop', value: 0, received: Date.now() };
         toyQueue.timestamp = Date.now();
         console.log(`📥 存入队列: 停止`);
         return res.json({
