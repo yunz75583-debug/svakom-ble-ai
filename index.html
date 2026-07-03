@@ -3,621 +3,471 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SVAKOM 中继控制</title>
+    <title>SVAKOM SL278K 中继</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            background: #0b0e14;
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
-            color: #fff;
+            padding: 16px;
+            color: #e6edf3;
         }
         .container {
-            background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(20px);
-            border-radius: 30px;
-            padding: 30px 24px;
+            background: #151b23;
+            border-radius: 28px;
+            padding: 24px 20px 28px;
             width: 100%;
             max-width: 400px;
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid #2d3643;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
         }
         h1 {
-            text-align: center;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 600;
             margin-bottom: 4px;
-            background: linear-gradient(90deg, #ff6b6b, #ee5a24);
+            background: linear-gradient(90deg, #f0883e, #e05a5a);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        .subtitle {
-            text-align: center;
+        .sub {
             font-size: 13px;
-            color: rgba(255,255,255,0.4);
-            margin-bottom: 20px;
+            color: #7d8590;
+            margin-bottom: 18px;
         }
         .status-bar {
-            background: rgba(255,255,255,0.06);
-            border-radius: 16px;
-            padding: 14px 18px;
-            margin-bottom: 20px;
+            background: #1c2532;
+            border-radius: 14px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border: 1px solid rgba(255,255,255,0.06);
+            border: 1px solid #2d3643;
+            font-size: 13px;
         }
-        .status-dot {
-            width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 10px;
-            transition: all 0.3s;
+        .dot {
+            display: inline-block;
+            width: 10px; height: 10px; border-radius: 50%;
+            margin-right: 8px;
         }
-        .status-dot.disconnected { background: #ff4757; }
-        .status-dot.connecting { background: #ffa502; animation: pulse 0.8s infinite; }
-        .status-dot.connected { background: #2ed573; }
-        .status-dot.relay { background: #1e90ff; animation: pulse 0.8s infinite; }
-        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
-        .status-text { font-size: 14px; font-weight: 500; }
-        .device-name { font-size: 13px; color: rgba(255,255,255,0.4); }
-        .btn {
-            width: 100%; padding: 16px; border: none; border-radius: 16px; font-size: 16px;
-            font-weight: 600; cursor: pointer; transition: all 0.2s; touch-action: manipulation;
-        }
-        .btn:active { transform: scale(0.97); }
-        .btn-primary {
-            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-            color: #fff;
-        }
-        .btn-primary:disabled { opacity: 0.4; transform: none; }
-        .btn-danger {
-            background: linear-gradient(135deg, #ff4757, #c0392b);
-            color: #fff;
-        }
-        .btn-secondary {
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            border: 1px solid rgba(255,255,255,0.15);
-        }
-        .btn-success {
-            background: linear-gradient(135deg, #2ed573, #1e90ff);
-            color: #fff;
-        }
+        .dot.off { background: #5a6577; }
+        .dot.on { background: #3fb950; box-shadow: 0 0 8px #3fb95066; }
+        .dot.warn { background: #d29922; }
         .input-group {
-            margin-top: 12px;
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            margin-bottom: 10px;
         }
         .input-group input {
             flex: 1;
-            padding: 12px 14px;
+            padding: 10px 14px;
             border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.1);
-            background: rgba(255,255,255,0.05);
-            color: #fff;
+            border: 1px solid #2d3643;
+            background: #0d1117;
+            color: #e6edf3;
             font-size: 14px;
             outline: none;
         }
-        .input-group input::placeholder { color: rgba(255,255,255,0.3); }
-        .input-group .btn { flex: 0 0 auto; width: auto; padding: 12px 20px; font-size: 14px; }
-        .control-section {
-            margin-top: 20px;
-            opacity: 0.4;
-            pointer-events: none;
-            transition: all 0.4s;
+        .input-group input::placeholder { color: #484f5a; }
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: 0.15s;
+            touch-action: manipulation;
         }
-        .control-section.active { opacity: 1; pointer-events: all; }
-        .control-label {
+        .btn:active { transform: scale(0.96); }
+        .btn-primary { background: #2d7aff; color: #fff; }
+        .btn-primary:disabled { opacity: 0.4; }
+        .btn-danger { background: #da3633; color: #fff; }
+        .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+        .btn-success { background: #238636; color: #fff; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .slider-group { margin-top: 16px; }
+        .slider-label {
             display: flex;
             justify-content: space-between;
-            font-size: 14px;
-            color: rgba(255,255,255,0.7);
-            margin-bottom: 8px;
+            font-size: 13px;
+            color: #8b949e;
+            margin-bottom: 4px;
         }
-        .control-value { font-weight: 600; color: #ff6b6b; }
+        .slider-label span:last-child { color: #f0883e; font-weight: 600; }
         input[type="range"] {
-            -webkit-appearance: none; appearance: none;
-            width: 100%; height: 6px; border-radius: 3px;
-            background: linear-gradient(90deg, rgba(255,107,107,0.2), rgba(255,107,107,0.6));
+            width: 100%;
+            height: 6px;
+            border-radius: 4px;
+            background: #21262d;
             outline: none;
+            -webkit-appearance: none;
         }
         input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none; appearance: none;
-            width: 28px; height: 28px; border-radius: 50%;
-            background: radial-gradient(circle, #ff6b6b, #ee5a24);
+            -webkit-appearance: none;
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            background: #2d7aff;
             cursor: pointer;
-            box-shadow: 0 0 20px rgba(255,107,107,0.3);
-            border: 2px solid rgba(255,255,255,0.2);
+            box-shadow: 0 0 10px #2d7aff66;
         }
         .log {
-            margin-top: 16px;
-            padding: 12px 14px;
-            background: rgba(0,0,0,0.3);
+            background: #0d1117;
             border-radius: 12px;
-            font-size: 11px;
-            font-family: "Courier New", monospace;
-            color: rgba(255,255,255,0.5);
-            max-height: 150px;
+            padding: 12px 14px;
+            max-height: 140px;
             overflow-y: auto;
-            word-break: break-all;
-            line-height: 1.8;
+            font-family: monospace;
+            font-size: 11px;
+            color: #7d8590;
+            line-height: 1.7;
+            border: 1px solid #21262d;
+            margin-top: 16px;
         }
-        .log .highlight { color: #ff6b6b; }
-        .log .error { color: #ff4757; }
-        .log .success { color: #2ed573; }
-        .log .info { color: #1e90ff; }
+        .log .ok { color: #3fb950; }
+        .log .err { color: #da3633; }
+        .log .warn { color: #d29922; }
         .footer {
             text-align: center;
-            margin-top: 16px;
             font-size: 11px;
-            color: rgba(255,255,255,0.2);
+            color: #3d4757;
+            margin-top: 14px;
+        }
+        .badge {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 10px;
+            border-radius: 20px;
+            background: #1c2532;
+            color: #7d8590;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>📡 SVAKOM 中继</h1>
-        <p class="subtitle">SL278H · 花样续命版</p>
+<div class="container">
+    <h1>📡 SL278K 中继</h1>
+    <div class="sub">震动 + 伸缩 · 双通道控制</div>
 
-        <div class="status-bar">
-            <span class="status-text">
-                <span class="status-dot disconnected" id="statusDot"></span>
-                <span id="statusText">未连接</span>
-            </span>
-            <span class="device-name" id="deviceName">-</span>
-        </div>
-
-        <div class="input-group">
-            <input type="text" id="relayUrl" placeholder="https://xxx.up.railway.app" value="">
-            <input type="password" id="relaySecret" placeholder="密码" value="" style="flex:0.6;">
-        </div>
-
-        <div style="display:flex; gap:10px; margin-top:8px;">
-            <button class="btn btn-secondary" id="connectRelayBtn" style="flex:1; padding:12px;">🔗 连接中继</button>
-            <button class="btn btn-secondary" id="connectBleBtn" style="flex:1; padding:12px;">🔵 连接蓝牙</button>
-        </div>
-
-        <!-- 媒体保活按钮 -->
-        <div style="margin-top:8px; display:flex; gap:10px;">
-            <button class="btn btn-success" id="playMediaBtn" style="flex:1; padding:12px;">🎵 播放保活媒体</button>
-            <button class="btn btn-danger" id="stopMediaBtn" style="flex:1; padding:12px;">⏹ 停止</button>
-        </div>
-
-        <div class="control-section" id="controlSection">
-            <div style="margin-top:20px;">
-                <div class="control-label">
-                    <span>⚡ 强度</span>
-                    <span class="control-value" id="intensityDisplay">0%</span>
-                </div>
-                <input type="range" id="intensitySlider" min="0" max="100" value="0">
-            </div>
-
-            <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
-                <button class="btn btn-secondary" style="flex:1; padding:10px;" data-intensity="20">20%</button>
-                <button class="btn btn-secondary" style="flex:1; padding:10px;" data-intensity="40">40%</button>
-                <button class="btn btn-secondary" style="flex:1; padding:10px;" data-intensity="60">60%</button>
-                <button class="btn btn-secondary" style="flex:1; padding:10px;" data-intensity="80">80%</button>
-                <button class="btn btn-secondary" style="flex:1; padding:10px;" data-intensity="100">100%</button>
-            </div>
-
-            <div style="display:flex; gap:10px; margin-top:12px;">
-                <button class="btn btn-danger" id="stopBtn" style="flex:1;">⏹ 停止</button>
-                <button class="btn btn-secondary" id="testBtn" style="flex:1;">🔬 测试</button>
-            </div>
-        </div>
-
-        <div class="log" id="log">等待操作...</div>
-        <div class="footer">中继模式 | 轮询间隔 300ms</div>
+    <div class="status-bar">
+        <span><span class="dot off" id="dotRelay"></span>中继</span>
+        <span><span class="dot off" id="dotBle"></span>蓝牙</span>
+        <span><span class="dot off" id="dotPoll"></span>轮询</span>
+        <span><span class="dot off" id="dotAudio"></span>保活</span>
     </div>
 
-    <script>
-        // ============================================================
-        // SVAKOM SL278H 网页中继 - 花样续命版
-        // ============================================================
+    <div class="input-group">
+        <input type="text" id="relayUrl" placeholder="https://xxx.up.railway.app">
+        <input type="password" id="relaySecret" placeholder="密码" style="flex:0.6;">
+    </div>
+    <div class="row">
+        <button class="btn btn-secondary" id="connectRelayBtn" style="flex:1;">🔗 连接中继</button>
+        <button class="btn btn-secondary" id="connectBleBtn" style="flex:1;">🔵 连接蓝牙</button>
+    </div>
+    <div class="row" style="margin-top:6px;">
+        <button class="btn btn-success" id="playAudioBtn" style="flex:1;">🔊 保活</button>
+        <button class="btn btn-danger" id="stopAudioBtn" style="flex:1;">⏹ 停止保活</button>
+    </div>
 
-        const SERVICE_UUID = "FFE0";
-        const CHARACTERISTIC_UUID = "FFE1";
-        const KEEPALIVE_INTERVAL_MS = 1500;
-        const POLL_INTERVAL_MS = 300;
+    <!-- 双通道控制 -->
+    <div class="slider-group">
+        <div class="slider-label">
+            <span>⚡ 震动强度</span>
+            <span id="vibDisplay">0%</span>
+        </div>
+        <input type="range" id="vibSlider" min="0" max="100" value="0">
+    </div>
+    <div class="slider-group">
+        <div class="slider-label">
+            <span>📏 伸缩强度</span>
+            <span id="extDisplay">0%</span>
+        </div>
+        <input type="range" id="extSlider" min="0" max="100" value="0">
+    </div>
+    <div class="row">
+        <button class="btn btn-primary" id="sendBtn" style="flex:1;">📤 发送</button>
+        <button class="btn btn-danger" id="stopBtn" style="flex:1;">⏹ 停止</button>
+        <button class="btn btn-secondary" id="testBtn" style="flex:0.7;">🔬 测试</button>
+    </div>
 
-        let bleDevice = null, bleServer = null, bleChar = null;
-        let isBleConnected = false;
-        let isRelayConnected = false;
-        let currentIntensity = 0;
-        let keepaliveTimer = null;
-        let pollTimer = null;
-        let relayUrl = '';
-        let relaySecret = '';
-        let isRunning = false;
+    <div class="log" id="log">等待操作...</div>
+    <div class="footer">中继 · 轮询 300ms · 续命 1500ms</div>
+</div>
 
-        // ===== 当前模式记录 =====
-        let currentMode = 'intensity'; // 'intensity' 或 'pattern'
-        let currentPattern = 1;
-        let currentLevel = 3;
+<script>
+    // ============================================================
+    // SVAKOM SL278K 中继 — 双通道控制
+    // ============================================================
 
-        // ===== 媒体保活 =====
-        let mediaElement = null;
-        let isMediaPlaying = false;
+    const SERVICE_UUID = "FFE0";
+    const CHARACTERISTIC_UUID = "FFE1";
+    const KEEPALIVE_MS = 1500;
+    const POLL_MS = 300;
 
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
-        const deviceName = document.getElementById('deviceName');
-        const relayUrlInput = document.getElementById('relayUrl');
-        const relaySecretInput = document.getElementById('relaySecret');
-        const connectRelayBtn = document.getElementById('connectRelayBtn');
-        const connectBleBtn = document.getElementById('connectBleBtn');
-        const playMediaBtn = document.getElementById('playMediaBtn');
-        const stopMediaBtn = document.getElementById('stopMediaBtn');
-        const intensitySlider = document.getElementById('intensitySlider');
-        const intensityDisplay = document.getElementById('intensityDisplay');
-        const controlSection = document.getElementById('controlSection');
-        const log = document.getElementById('log');
-        const stopBtn = document.getElementById('stopBtn');
-        const testBtn = document.getElementById('testBtn');
+    let bleDevice = null, bleServer = null, bleChar = null;
+    let isBleConnected = false;
+    let isRelayConnected = false;
+    let relayUrl = '', relaySecret = '';
+    let vibVal = 0, extVal = 0;          // 当前百分比 0-100
+    let lastVib = 0, lastExt = 0;
+    let keepaliveTimer = null, pollTimer = null;
+    let audioEl = null;
 
-        function logMessage(msg, type = '') {
-            const time = new Date().toLocaleTimeString();
-            const cls = type ? ` class="${type}"` : '';
-            log.innerHTML = `<span${cls}>[${time}] ${msg}</span>\n` + log.innerHTML;
-            if (log.children.length > 50) log.removeChild(log.lastChild);
+    const logEl = document.getElementById('log');
+    const dotRelay = document.getElementById('dotRelay');
+    const dotBle = document.getElementById('dotBle');
+    const dotPoll = document.getElementById('dotPoll');
+    const dotAudio = document.getElementById('dotAudio');
+
+    function log(msg, type = '') {
+        const t = new Date().toLocaleTimeString();
+        const cls = type ? ` class="${type}"` : '';
+        logEl.innerHTML = `<span${cls}>[${t}] ${msg}</span>\n` + logEl.innerHTML;
+        if (logEl.children.length > 80) logEl.removeChild(logEl.lastChild);
+    }
+
+    function setDot(el, state) {
+        el.className = 'dot ' + state;
+    }
+
+    // ===== 指令构建 =====
+    function buildCommands(vibPct, extPct) {
+        // 震动 0-100 → 0-7
+        const v = Math.min(7, Math.max(0, Math.round(vibPct / 100 * 7)));
+        // 伸缩 0-100 → 0-10
+        const e = Math.min(10, Math.max(0, Math.round(extPct / 100 * 10)));
+        return {
+            vib: new Uint8Array([0x55, 0x08, 0x00, 0x00, v, 0x00, 0x00]),
+            ext: new Uint8Array([0x55, 0x03, 0x00, 0x00, e, 0x05, 0x00]),
+            v, e
+        };
+    }
+
+    // ===== 发送 =====
+    async function sendBoth(vibPct, extPct) {
+        if (!bleChar || !isBleConnected) {
+            log('❌ 蓝牙未连接', 'err');
+            return false;
         }
-
-        function setStatus(state, text) {
-            statusDot.className = 'status-dot ' + state;
-            statusText.textContent = text;
+        try {
+            const cmds = buildCommands(vibPct, extPct);
+            await bleChar.writeValue(cmds.vib);
+            await bleChar.writeValue(cmds.ext);
+            lastVib = vibPct;
+            lastExt = extPct;
+            log(`📤 震动 ${cmds.v} · 伸缩 ${cmds.e}`, 'ok');
+            return true;
+        } catch (e) {
+            log(`❌ 发送失败: ${e.message}`, 'err');
+            return false;
         }
+    }
 
-        // ===== 媒体保活 =====
-        function playMedia() {
-            try {
-                if (mediaElement) {
-                    mediaElement.remove();
-                    mediaElement = null;
+    // ===== 停止 =====
+    async function stopBoth() {
+        await sendBoth(0, 0);
+        document.getElementById('vibSlider').value = 0;
+        document.getElementById('extSlider').value = 0;
+        document.getElementById('vibDisplay').textContent = '0%';
+        document.getElementById('extDisplay').textContent = '0%';
+        vibVal = 0; extVal = 0;
+        log('⏹ 已停止', 'warn');
+    }
+
+    // ===== 续命 =====
+    function startKeepalive() {
+        stopKeepalive();
+        keepaliveTimer = setInterval(() => {
+            if (bleChar && isBleConnected && (lastVib > 0 || lastExt > 0)) {
+                const cmds = buildCommands(lastVib, lastExt);
+                bleChar.writeValue(cmds.vib).catch(() => {});
+                bleChar.writeValue(cmds.ext).catch(() => {});
+            }
+        }, KEEPALIVE_MS);
+    }
+
+    function stopKeepalive() {
+        if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+    }
+
+    // ===== 轮询 =====
+    async function pollCloud() {
+        if (!isRelayConnected || !relayUrl || !relaySecret) return;
+        try {
+            const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                if (resp.status === 401) {
+                    log('❌ 密码错误', 'err');
+                    isRelayConnected = false;
+                    setDot(dotRelay, 'off');
                 }
-                
-                mediaElement = document.createElement('video');
-                mediaElement.src = 'https://img.heliar.top/file/1772516513350_30min-osbvow_2.mp4';
-                mediaElement.loop = true;
-                mediaElement.muted = false;
-                mediaElement.playsInline = true;
-                mediaElement.controls = true;
-                mediaElement.style.width = '100%';
-                mediaElement.style.maxHeight = '120px';
-                mediaElement.style.marginTop = '8px';
-                mediaElement.style.borderRadius = '8px';
-                mediaElement.style.backgroundColor = '#000';
-                document.querySelector('.container').appendChild(mediaElement);
-                
-                const playPromise = mediaElement.play();
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        logMessage('🎵 媒体已开始播放', 'success');
-                        isMediaPlaying = true;
-                        playMediaBtn.textContent = '✅ 媒体播放中';
-                    }).catch((e) => {
-                        logMessage(`⚠️ 媒体播放失败: ${e.message}`, 'error');
-                    });
-                }
-            } catch (e) {
-                logMessage(`⚠️ 媒体启动失败: ${e.message}`, 'error');
-            }
-        }
-
-        function stopMedia() {
-            if (mediaElement) {
-                try {
-                    mediaElement.pause();
-                    mediaElement.remove();
-                } catch (e) {}
-                mediaElement = null;
-            }
-            isMediaPlaying = false;
-            playMediaBtn.textContent = '🎵 播放保活媒体';
-            logMessage('⏹ 媒体已停止', 'info');
-        }
-
-        function buildCommand(intensity) {
-            const value = Math.round((intensity / 100) * 255);
-            if (intensity === 0 || value === 0) {
-                return new Uint8Array([0x55, 0x04, 0x00, 0x00, 0x00, 0x00, 0xAA]);
-            }
-            return new Uint8Array([0x55, 0x04, 0x00, 0x00, 0x01, value, 0xAA]);
-        }
-
-        async function sendPatternCommand(pattern, level) {
-            if (!bleChar || !isBleConnected) {
-                logMessage('❌ 蓝牙未连接', 'error');
-                return false;
-            }
-            const mode = Math.min(8, Math.max(1, pattern));
-            const lv = Math.min(5, Math.max(1, level || 3));
-            const bytes = new Uint8Array([0x55, 0x03, 0x00, 0x00, mode, lv, 0x00]);
-            try {
-                await bleChar.writeValue(bytes);
-                const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
-                logMessage(`📤 花样: ${hex} (花样 ${mode}, 等级 ${lv})`, 'highlight');
-                return true;
-            } catch (e) {
-                logMessage(`❌ 花样发送失败: ${e.message}`, 'error');
-                return false;
-            }
-        }
-
-        async function sendBleCommand(intensity) {
-            if (!bleChar || !isBleConnected) {
-                logMessage('❌ 蓝牙未连接，无法发送', 'error');
-                return false;
-            }
-            try {
-                const bytes = buildCommand(intensity);
-                await bleChar.writeValue(bytes);
-                const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
-                logMessage(`📤 强度: ${hex} (${intensity}%)`, 'highlight');
-                return true;
-            } catch (e) {
-                logMessage(`❌ 发送失败: ${e.message}`, 'error');
-                return false;
-            }
-        }
-
-        // ===== 续命机制（支持强度和花样） =====
-        function startKeepalive() {
-            stopKeepalive();
-            if (!isBleConnected) return;
-            if (currentMode === 'intensity' && currentIntensity === 0) return;
-            
-            isRunning = true;
-            
-            // 立即发送一次
-            if (currentMode === 'intensity') {
-                sendBleCommand(currentIntensity);
-            } else if (currentMode === 'pattern') {
-                sendPatternCommand(currentPattern, currentLevel);
-            }
-            
-            keepaliveTimer = setInterval(() => {
-                if (isBleConnected && isRunning) {
-                    if (currentMode === 'intensity') {
-                        sendBleCommand(currentIntensity);
-                    } else if (currentMode === 'pattern') {
-                        sendPatternCommand(currentPattern, currentLevel);
-                    }
-                } else {
-                    stopKeepalive();
-                }
-            }, KEEPALIVE_INTERVAL_MS);
-        }
-
-        function stopKeepalive() {
-            isRunning = false;
-            if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
-        }
-
-        function setIntensity(value) {
-            value = Math.max(0, Math.min(100, value));
-            currentIntensity = value;
-            currentMode = 'intensity';
-            intensitySlider.value = value;
-            intensityDisplay.textContent = value + '%';
-            if (value === 0) { stopKeepalive(); sendBleCommand(0); }
-            else if (isBleConnected) startKeepalive();
-        }
-
-        function setPattern(pattern, level) {
-            currentPattern = Math.min(8, Math.max(1, pattern));
-            currentLevel = Math.min(5, Math.max(1, level || 3));
-            currentMode = 'pattern';
-            if (isBleConnected) startKeepalive();
-        }
-
-        // ===== 轮询云端 =====
-        async function pollCloud() {
-            logMessage('🔍 pollCloud 被调用了', 'info');
-            
-            if (!isRelayConnected) {
-                logMessage('⚠️ isRelayConnected = false，跳过轮询', 'error');
                 return;
             }
-            if (!relayUrl) {
-                logMessage('⚠️ relayUrl 为空，跳过轮询', 'error');
-                return;
-            }
-            if (!relaySecret) {
-                logMessage('⚠️ relaySecret 为空，跳过轮询', 'error');
-                return;
-            }
-
-            try {
-                const url = `${relayUrl}/toy-next?secret=${relaySecret}`;
-                logMessage(`🔍 轮询请求: ${url}`, 'info');
-                
-                const resp = await fetch(url);
-                logMessage(`🔍 响应状态: ${resp.status}`, 'info');
-                
-                if (!resp.ok) {
-                    if (resp.status === 401) {
-                        logMessage('❌ 中继密码错误', 'error');
-                        isRelayConnected = false;
-                        return;
-                    }
-                    logMessage(`❌ 轮询失败: HTTP ${resp.status}`, 'error');
-                    return;
+            const data = await resp.json();
+            if (data.command) {
+                const cmd = data.command;
+                if (cmd.action === 'vibration') {
+                    const v = Math.min(100, Math.max(0, cmd.value));
+                    document.getElementById('vibSlider').value = v;
+                    document.getElementById('vibDisplay').textContent = v + '%';
+                    vibVal = v;
+                    sendBoth(v, extVal);
+                } else if (cmd.action === 'extension') {
+                    const e = Math.min(100, Math.max(0, cmd.value));
+                    document.getElementById('extSlider').value = e;
+                    document.getElementById('extDisplay').textContent = e + '%';
+                    extVal = e;
+                    sendBoth(vibVal, e);
+                } else if (cmd.action === 'stop') {
+                    stopBoth();
                 }
-                const data = await resp.json();
-                logMessage(`🔍 取到数据: ${JSON.stringify(data)}`, 'info');
-
-                if (data.command) {
-                    const cmd = data.command;
-                    logMessage(`📥 云端指令: ${JSON.stringify(cmd)}`, 'info');
-                    
-                    if (cmd.action === 'intensity') {
-                        const val = cmd.value;
-                        logMessage(`📥 云端指令: 强度 ${val}%`, 'info');
-                        setIntensity(val);
-                        document.querySelectorAll('[data-intensity]').forEach(b => {
-                            b.classList.toggle('active', parseInt(b.dataset.intensity) === val);
-                        });
-                    } else if (cmd.action === 'pattern') {
-                        const pattern = cmd.pattern;
-                        const level = cmd.level || 3;
-                        logMessage(`📥 云端指令: 花样 ${pattern}，等级 ${level}`, 'info');
-                        setPattern(pattern, level);
-                    } else if (cmd.action === 'stop') {
-                        logMessage('📥 云端指令: 停止', 'info');
-                        setIntensity(0);
-                        document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
-                    }
-                }
-            } catch (e) {
-                logMessage(`❌ 轮询异常: ${e.message}`, 'error');
             }
+        } catch (e) {
+            // 静默
         }
+    }
 
-        function startPolling() {
-            if (pollTimer) clearInterval(pollTimer);
-            logMessage('🔄 准备开始轮询...', 'info');
-            pollTimer = setInterval(() => {
-                pollCloud();
-            }, POLL_INTERVAL_MS);
-            logMessage('🔄 开始轮询云端 (300ms)', 'info');
+    function startPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(pollCloud, POLL_MS);
+        setDot(dotPoll, 'on');
+        log('🔄 轮询启动 (300ms)', 'ok');
+    }
+
+    function stopPolling() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; setDot(dotPoll, 'off'); }
+    }
+
+    // ===== 连接中继 =====
+    async function connectRelay() {
+        const url = document.getElementById('relayUrl').value.trim();
+        const secret = document.getElementById('relaySecret').value.trim();
+        if (!url) { log('❌ 请输入地址', 'err'); return; }
+        if (!secret) { log('❌ 请输入密码', 'err'); return; }
+        relayUrl = url.startsWith('http') ? url : 'https://' + url;
+        relaySecret = secret;
+        try {
+            const resp = await fetch(`${relayUrl}/status`);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            isRelayConnected = true;
+            setDot(dotRelay, 'on');
+            log('✅ 中继已连接', 'ok');
+            startPolling();
+        } catch (e) {
+            log(`❌ 连接失败: ${e.message}`, 'err');
         }
+    }
 
-        function stopPolling() {
-            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; logMessage('⏹ 停止轮询', ''); }
-        }
-
-        async function connectRelay() {
-            const url = relayUrlInput.value.trim();
-            const secret = relaySecretInput.value.trim();
-            if (!url) { logMessage('❌ 请输入中继地址', 'error'); return; }
-            if (!secret) { logMessage('❌ 请输入中继密码', 'error'); return; }
-            relayUrl = url.startsWith('http') ? url : 'https://' + url;
-            relaySecret = secret;
-            logMessage(`🔗 尝试连接: ${relayUrl}`, 'info');
-            
-            try {
-                logMessage('🔗 测试中继连接...', '');
-                const resp = await fetch(`${relayUrl}/status`);
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                const data = await resp.json();
-                logMessage(`✅ 中继连接成功 (状态: ${data.hasCommand ? '有待执行指令' : '空闲'})`, 'success');
-                isRelayConnected = true;
-                connectRelayBtn.textContent = '✅ 中继已连接';
-                startPolling();
-            } catch (e) {
-                logMessage(`❌ 中继连接失败: ${e.message}`, 'error');
-                isRelayConnected = false;
-            }
-        }
-
-        async function connectBle() {
-            if (!navigator.bluetooth) {
-                logMessage('❌ 请使用 Bluefy 浏览器打开', 'error');
-                alert('请使用 Bluefy 浏览器打开');
-                return;
-            }
-            try {
-                setStatus('connecting', '扫描中...');
-                connectBleBtn.disabled = true;
-                logMessage('🔍 扫描蓝牙设备...', '');
-                bleDevice = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: [SERVICE_UUID]
-                });
-                logMessage(`✅ 找到: ${bleDevice.name || '未知'}`, 'success');
-                deviceName.textContent = bleDevice.name || '未知';
-                bleServer = await bleDevice.gatt.connect();
-                logMessage('✅ GATT 连接成功', 'success');
-                const service = await bleServer.getPrimaryService(SERVICE_UUID);
-                bleChar = await service.getCharacteristic(CHARACTERISTIC_UUID);
-                logMessage('✅ 蓝牙特征已获取', 'success');
-                isBleConnected = true;
-                setStatus('connected', '蓝牙已连接');
-                controlSection.classList.add('active');
-                connectBleBtn.textContent = '✅ 蓝牙已连接';
-                logMessage('🎉 蓝牙就绪！等待云端指令...', 'success');
-                bleDevice.addEventListener('gattserverdisconnected', () => {
-                    logMessage('⚠️ 蓝牙断开', 'error');
-                    disconnectBle();
-                });
-                await sendBleCommand(0);
-            } catch (e) {
-                logMessage(`❌ 蓝牙连接失败: ${e.message}`, 'error');
-                setStatus('disconnected', '连接失败');
-                connectBleBtn.disabled = false;
-            }
-        }
-
-        function disconnectBle() {
-            stopKeepalive();
-            isBleConnected = false;
-            bleChar = null;
-            if (bleServer) { try { bleServer.disconnect(); } catch (e) {} bleServer = null; }
-            bleDevice = null;
-            setStatus('disconnected', '未连接');
-            controlSection.classList.remove('active');
-            connectBleBtn.textContent = '🔵 连接蓝牙';
-            connectBleBtn.disabled = false;
-            deviceName.textContent = '-';
-            logMessage('🔌 蓝牙已断开', '');
-        }
-
-        // ===== 事件绑定 =====
-        connectRelayBtn.addEventListener('click', connectRelay);
-        connectBleBtn.addEventListener('click', connectBle);
-        playMediaBtn.addEventListener('click', playMedia);
-        stopMediaBtn.addEventListener('click', stopMedia);
-
-        intensitySlider.addEventListener('input', (e) => {
-            const val = parseInt(e.target.value);
-            setIntensity(val);
-            document.querySelectorAll('[data-intensity]').forEach(b => {
-                b.classList.toggle('active', parseInt(b.dataset.intensity) === val);
-            });
-        });
-
-        document.querySelectorAll('[data-intensity]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const val = parseInt(btn.dataset.intensity);
-                setIntensity(val);
-                document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-            });
-        });
-
-        stopBtn.addEventListener('click', () => {
-            setIntensity(0);
-            document.querySelectorAll('[data-intensity]').forEach(b => b.classList.remove('active'));
-            logMessage('⏹ 已停止', '');
-        });
-
-        testBtn.addEventListener('click', async () => {
-            if (!isBleConnected) { logMessage('❌ 请先连接蓝牙', 'error'); return; }
-            logMessage('🔬 测试: 发送 30%...', '');
-            await sendBleCommand(30);
-            setTimeout(async () => { await sendBleCommand(0); logMessage('⏹ 测试停止', ''); }, 500);
-        });
-
-        // ===== 启动 =====
-        setStatus('disconnected', '未连接');
-        logMessage('📡 SVAKOM 网页中继已加载（花样续命版）', '');
-        logMessage('💡 先连接中继，再连接蓝牙', '');
-        logMessage('💡 点击「播放保活媒体」测试后台保活', '');
-
-        const savedUrl = localStorage.getItem('relayUrl');
-        const savedSecret = localStorage.getItem('relaySecret');
-        if (savedUrl) relayUrlInput.value = savedUrl;
-        if (savedSecret) relaySecretInput.value = savedSecret;
-
-        relayUrlInput.addEventListener('change', () => localStorage.setItem('relayUrl', relayUrlInput.value));
-        relaySecretInput.addEventListener('change', () => localStorage.setItem('relaySecret', relaySecretInput.value));
-
+    // ===== 连接蓝牙 =====
+    async function connectBle() {
         if (!navigator.bluetooth) {
-            logMessage('⚠️ 请使用 Bluefy 浏览器打开', 'error');
-        } else {
-            logMessage('✅ Web Bluetooth 可用', 'success');
+            log('❌ 请使用 Bluefy', 'err');
+            alert('请使用 Bluefy 浏览器打开');
+            return;
         }
-    </script>
+        try {
+            setDot(dotBle, 'warn');
+            log('🔍 扫描 SL278K...', '');
+            bleDevice = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: [SERVICE_UUID]
+            });
+            log(`✅ 找到: ${bleDevice.name || '未知'}`, 'ok');
+            bleServer = await bleDevice.gatt.connect();
+            const svc = await bleServer.getPrimaryService(SERVICE_UUID);
+            bleChar = await svc.getCharacteristic(CHARACTERISTIC_UUID);
+            isBleConnected = true;
+            setDot(dotBle, 'on');
+            log('✅ 蓝牙已连接', 'ok');
+            bleDevice.addEventListener('gattserverdisconnected', () => {
+                isBleConnected = false;
+                setDot(dotBle, 'off');
+                log('⚠️ 蓝牙断开', 'err');
+            });
+            startKeepalive();
+            await stopBoth();
+        } catch (e) {
+            log(`❌ 蓝牙失败: ${e.message}`, 'err');
+            setDot(dotBle, 'off');
+        }
+    }
+
+    // ===== 音频保活 =====
+    function playAudio() {
+        try {
+            if (!audioEl) {
+                audioEl = document.createElement('audio');
+                audioEl.loop = true;
+                audioEl.volume = 0.01;
+                audioEl.style.display = 'none';
+                audioEl.src = 'https://img.heliar.top/file/1772516513350_30min-osbvow_2.mp4';
+                document.body.appendChild(audioEl);
+            }
+            audioEl.play().then(() => {
+                setDot(dotAudio, 'on');
+                log('🔊 保活音频已启动', 'ok');
+            }).catch(() => {
+                log('⚠️ 音频播放需用户交互', 'warn');
+            });
+        } catch (e) {
+            log(`⚠️ 音频启动失败: ${e.message}`, 'warn');
+        }
+    }
+
+    function stopAudio() {
+        if (audioEl) { audioEl.pause(); audioEl.currentTime = 0; }
+        setDot(dotAudio, 'off');
+        log('🔇 保活已停止', 'warn');
+    }
+
+    // ===== UI 事件绑定 =====
+    document.getElementById('connectRelayBtn').addEventListener('click', connectRelay);
+    document.getElementById('connectBleBtn').addEventListener('click', connectBle);
+    document.getElementById('playAudioBtn').addEventListener('click', playAudio);
+    document.getElementById('stopAudioBtn').addEventListener('click', stopAudio);
+
+    const vibSlider = document.getElementById('vibSlider');
+    const extSlider = document.getElementById('extSlider');
+    const vibDisplay = document.getElementById('vibDisplay');
+    const extDisplay = document.getElementById('extDisplay');
+
+    vibSlider.addEventListener('input', () => {
+        vibDisplay.textContent = vibSlider.value + '%';
+        vibVal = parseInt(vibSlider.value);
+    });
+    extSlider.addEventListener('input', () => {
+        extDisplay.textContent = extSlider.value + '%';
+        extVal = parseInt(extSlider.value);
+    });
+
+    document.getElementById('sendBtn').addEventListener('click', () => {
+        sendBoth(parseInt(vibSlider.value), parseInt(extSlider.value));
+    });
+
+    document.getElementById('stopBtn').addEventListener('click', stopBoth);
+
+    document.getElementById('testBtn').addEventListener('click', async () => {
+        log('🔬 测试: 震动 50% + 伸缩 30%', 'warn');
+        await sendBoth(50, 30);
+        setTimeout(() => stopBoth(), 2000);
+    });
+
+    // ===== 保存配置 =====
+    const savedUrl = localStorage.getItem('relayUrl');
+    const savedSecret = localStorage.getItem('relaySecret');
+    if (savedUrl) document.getElementById('relayUrl').value = savedUrl;
+    if (savedSecret) document.getElementById('relaySecret').value = savedSecret;
+
+    document.getElementById('relayUrl').addEventListener('change', e => localStorage.setItem('relayUrl', e.target.value));
+    document.getElementById('relaySecret').addEventListener('change', e => localStorage.setItem('relaySecret', e.target.value));
+
+    log('📡 SL278K 中继已加载', '');
+    log('💡 连接中继 → 连接蓝牙 → 控制', '');
+</script>
 </body>
 </html>
